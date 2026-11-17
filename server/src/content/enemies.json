@@ -1,0 +1,104 @@
+[
+  {
+    "id": "e_python",
+    "name": "青鳞妖蟒",
+    "desc": "盘踞山道的老蟒，鳞甲如铁，吐信如剑。",
+    "tier": 0,
+    "might": 12,
+    "locations": [
+      "sect",
+      "realm",
+      "village"
+    ]
+  },
+  {
+    "id": "e_golem",
+    "name": "矿洞石傀",
+    "desc": "古修留下的守矿傀儡，不知疲倦，不畏生死。",
+    "tier": 1,
+    "might": 16,
+    "locations": [
+      "cave"
+    ]
+  },
+  {
+    "id": "e_ape",
+    "name": "瀑下水猿",
+    "desc": "力大无穷的水猿，专把炼体之人掀下深潭。",
+    "tier": 1,
+    "might": 15,
+    "locations": [
+      "falls"
+    ]
+  },
+  {
+    "id": "e_robber",
+    "name": "坊市劫修",
+    "desc": "专挑落单修士下手的劫修，刀口舔血多年。",
+    "tier": 1,
+    "might": 18,
+    "locations": [
+      "market"
+    ]
+  },
+  {
+    "id": "e_wolf",
+    "name": "雪原冰狼王",
+    "desc": "统领狼群的冰狼王，獠牙带霜，目光如炬。",
+    "tier": 1,
+    "might": 17,
+    "locations": [
+      "border"
+    ]
+  },
+  {
+    "id": "e_bear",
+    "name": "铁背苍熊",
+    "desc": "万兽山脉的霸主，一掌开山，皮糙肉厚。",
+    "tier": 2,
+    "might": 22,
+    "locations": [
+      "wilds"
+    ]
+  },
+  {
+    "id": "e_heartdemon",
+    "name": "古刹心魔",
+    "desc": "由历代僧人杂念凝成的心魔，攻心为上——它长着你的脸。",
+    "tier": 2,
+    "might": 20,
+    "locations": [
+      "temple"
+    ]
+  },
+  {
+    "id": "e_guard",
+    "name": "秘境守府傀儡",
+    "desc": "守着古修遗府的青铜傀儡，刀枪不入，步步如山。",
+    "tier": 2,
+    "might": 24,
+    "locations": [
+      "realm"
+    ]
+  },
+  {
+    "id": "e_tianjiao",
+    "name": "天骄 · 陆九章",
+    "desc": "天骄榜前列，剑法凌厉，出手不留情面。",
+    "tier": 2,
+    "might": 26,
+    "locations": [
+      "arena"
+    ]
+  },
+  {
+    "id": "e_demonlord",
+    "name": "镇魔关魔将",
+    "desc": "魔潮先锋魔将，煞气冲霄——镇魔关最危险的对手。",
+    "tier": 3,
+    "might": 30,
+    "locations": [
+      "demonfront"
+    ]
+  }
+]

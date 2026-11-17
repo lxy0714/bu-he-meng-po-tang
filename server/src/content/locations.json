@@ -1,0 +1,86 @@
+[
+  {
+    "id": "sect",
+    "name": "青云山门",
+    "desc": "宗门所在，灵气充沛，适合修炼与突破。",
+    "minRealm": 0,
+    "group": "sect"
+  },
+  {
+    "id": "market",
+    "name": "临渊坊市",
+    "desc": "修士交易之地，奇遇与买卖并存。",
+    "minRealm": 0,
+    "group": "market"
+  },
+  {
+    "id": "realm",
+    "name": "青冥秘境",
+    "desc": "古修遗府，机缘与凶险各半。第一世需筑基方可入内，第二世起门槛取消。",
+    "minRealm": 1,
+    "group": "realm"
+  },
+  {
+    "id": "village",
+    "name": "山下凡村",
+    "desc": "你出生的村子，休整回血最稳妥。",
+    "minRealm": 0,
+    "group": "village"
+  },
+  {
+    "id": "cave",
+    "name": "听涛洞府",
+    "desc": "崖壁洞府，清修炼丹之所；轮回后可接管前世洞府旧址。",
+    "minRealm": 0,
+    "group": "cave"
+  },
+  {
+    "id": "fields",
+    "name": "百草灵田",
+    "desc": "宗门灵田，种药收药，也可垂钓灵潭。",
+    "minRealm": 0,
+    "group": "fields"
+  },
+  {
+    "id": "arena",
+    "name": "天骄论道台",
+    "desc": "同阶天骄争锋之地，跨境挑战亦在此。",
+    "minRealm": 2,
+    "group": "arena"
+  },
+  {
+    "id": "demonfront",
+    "name": "镇魔关",
+    "desc": "抗魔前线，军功与凶险并存——中等偏虐之地，随时可能陨落。",
+    "minRealm": 3,
+    "group": "demonfront"
+  },
+  {
+    "id": "temple",
+    "name": "古刹云深寺",
+    "desc": "深山古刹，钟声涤心，坐禅养神之地。",
+    "minRealm": 0,
+    "group": "temple"
+  },
+  {
+    "id": "wilds",
+    "name": "万兽山脉",
+    "desc": "妖兽横行的原始山脉，猎兽与采药并存，凶险不下镇魔关。",
+    "minRealm": 1,
+    "group": "wilds"
+  },
+  {
+    "id": "border",
+    "name": "北境雪原",
+    "desc": "极北苦寒之地，冰灵气浓郁，商队与雪妖出没。",
+    "minRealm": 1,
+    "group": "border"
+  },
+  {
+    "id": "falls",
+    "name": "天河飞瀑",
+    "desc": "天河倒悬的巨瀑，水汽灵气充沛，瀑下炼体、潭边垂钓皆宜。",
+    "minRealm": 0,
+    "group": "falls"
+  }
+]

@@ -1,0 +1,48 @@
+[
+  {
+    "id": "tr_pillbox",
+    "name": "丹匣",
+    "desc": "一匣前世炼好的丹药，取回得修为 +60。",
+    "legacyCost": 2,
+    "effect": {
+      "cult": 60
+    }
+  },
+  {
+    "id": "tr_coffer",
+    "name": "灵石宝匣",
+    "desc": "一匣封存的灵石，取回得灵石 +80。",
+    "legacyCost": 2,
+    "effect": {
+      "stones": 80
+    }
+  },
+  {
+    "id": "tr_herbbox",
+    "name": "百草囊",
+    "desc": "一囊封存的灵药种子与成药，取回得修为 +35、灵石 +40。",
+    "legacyCost": 2,
+    "effect": {
+      "cult": 35,
+      "stones": 40
+    }
+  },
+  {
+    "id": "tr_scroll",
+    "name": "功法残卷匣",
+    "desc": "封存的功法心得，取回得修为 +90。",
+    "legacyCost": 3,
+    "effect": {
+      "cult": 90
+    }
+  },
+  {
+    "id": "tr_jadecase",
+    "name": "灵玉宝匣",
+    "desc": "一匣上品灵玉，取回得灵石 +140。",
+    "legacyCost": 3,
+    "effect": {
+      "stones": 140
+    }
+  }
+]

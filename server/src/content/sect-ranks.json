@@ -1,0 +1,34 @@
+[
+  {
+    "id": "outer",
+    "name": "外门弟子",
+    "contribNeed": 0,
+    "realmNeed": 0,
+    "stipend": 5,
+    "cultivateBonus": 0
+  },
+  {
+    "id": "inner",
+    "name": "内门弟子",
+    "contribNeed": 60,
+    "realmNeed": 1,
+    "stipend": 15,
+    "cultivateBonus": 2
+  },
+  {
+    "id": "true",
+    "name": "真传弟子",
+    "contribNeed": 180,
+    "realmNeed": 2,
+    "stipend": 40,
+    "cultivateBonus": 4
+  },
+  {
+    "id": "elder",
+    "name": "宗门长老",
+    "contribNeed": 420,
+    "realmNeed": 3,
+    "stipend": 90,
+    "cultivateBonus": 6
+  }
+]

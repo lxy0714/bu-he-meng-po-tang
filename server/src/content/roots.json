@@ -1,0 +1,92 @@
+[
+  {
+    "id": "waste",
+    "name": "废灵根",
+    "desc": "灵根驳杂近乎于无，修炼极慢，却因祸得福——机缘奇高。",
+    "might": 8,
+    "sense": 10,
+    "fortune": 22,
+    "body": 12
+  },
+  {
+    "id": "gold",
+    "name": "金灵根",
+    "desc": "锋锐无匹，剑修的好苗子，战力出众。",
+    "might": 20,
+    "sense": 10,
+    "fortune": 10,
+    "body": 13
+  },
+  {
+    "id": "wood",
+    "name": "木灵根",
+    "desc": "生机绵长，体魄强健，最耐熬。",
+    "might": 11,
+    "sense": 12,
+    "fortune": 11,
+    "body": 20
+  },
+  {
+    "id": "water",
+    "name": "水灵根",
+    "desc": "神识敏锐，善于洞察先机。",
+    "might": 10,
+    "sense": 20,
+    "fortune": 12,
+    "body": 10
+  },
+  {
+    "id": "fire",
+    "name": "火灵根",
+    "desc": "性烈如火，斗法凶猛，体魄亦不弱。",
+    "might": 18,
+    "sense": 9,
+    "fortune": 10,
+    "body": 15
+  },
+  {
+    "id": "earth",
+    "name": "土灵根",
+    "desc": "厚重沉稳，防御如山，最擅持久战。",
+    "might": 12,
+    "sense": 9,
+    "fortune": 11,
+    "body": 19
+  },
+  {
+    "id": "thunder",
+    "name": "雷灵根",
+    "desc": "变异灵根，天雷亲和，斗法爆发惊人。",
+    "might": 21,
+    "sense": 11,
+    "fortune": 9,
+    "body": 12
+  },
+  {
+    "id": "ice",
+    "name": "冰灵根",
+    "desc": "变异灵根，心如止水，神识凝练。",
+    "might": 13,
+    "sense": 19,
+    "fortune": 10,
+    "body": 12
+  },
+  {
+    "id": "swordbody",
+    "name": "先天剑体",
+    "desc": "特殊体质，天生剑骨，剑道一日千里。",
+    "might": 22,
+    "sense": 12,
+    "fortune": 10,
+    "body": 11
+  },
+  {
+    "id": "heaven",
+    "name": "天灵根",
+    "desc": "万中无一，修炼如饮水——转世大能才有的命格。",
+    "might": 18,
+    "sense": 18,
+    "fortune": 16,
+    "body": 16
+  }
+]

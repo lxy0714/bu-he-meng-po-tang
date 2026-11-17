@@ -1,0 +1,134 @@
+[
+  {
+    "id": "t_swordbone",
+    "name": "剑骨天成",
+    "tier": "gold",
+    "desc": "战力 +6。"
+  },
+  {
+    "id": "t_pillbody",
+    "name": "百脉俱通",
+    "tier": "gold",
+    "desc": "体魄 +6。"
+  },
+  {
+    "id": "t_insight",
+    "name": "慧眼通明",
+    "tier": "gold",
+    "desc": "神识 +6。"
+  },
+  {
+    "id": "t_luckystar",
+    "name": "气运加身",
+    "tier": "gold",
+    "desc": "机缘 +6。"
+  },
+  {
+    "id": "t_longlife",
+    "name": "龟鹤之寿",
+    "tier": "purple",
+    "desc": "寿元 +20%。"
+  },
+  {
+    "id": "t_diligent",
+    "name": "勤能补拙",
+    "tier": "purple",
+    "desc": "修炼收益 +25%。"
+  },
+  {
+    "id": "t_greedless",
+    "name": "守心如玉",
+    "tier": "purple",
+    "desc": "突破难度 −10。"
+  },
+  {
+    "id": "t_wealth",
+    "name": "点石成金",
+    "tier": "purple",
+    "desc": "灵石收益 +50%。"
+  },
+  {
+    "id": "t_resilient",
+    "name": "百折不挠",
+    "tier": "blue",
+    "desc": "事件失败的气血损失减半。"
+  },
+  {
+    "id": "t_social",
+    "name": "长袖善舞",
+    "tier": "blue",
+    "desc": "业力收益翻倍。"
+  },
+  {
+    "id": "t_sturdy",
+    "name": "皮糙肉厚",
+    "tier": "blue",
+    "desc": "气血上限 +20。"
+  },
+  {
+    "id": "t_focus",
+    "name": "心无旁骛",
+    "tier": "blue",
+    "desc": "灵力上限 +20。"
+  },
+  {
+    "id": "t_alchemy",
+    "name": "丹道天才",
+    "tier": "gold",
+    "desc": "炼丹检定 +12。"
+  },
+  {
+    "id": "t_forge",
+    "name": "铸剑奇才",
+    "tier": "purple",
+    "desc": "炼器检定 +12。"
+  },
+  {
+    "id": "t_fish",
+    "name": "姜太公之相",
+    "tier": "blue",
+    "desc": "垂钓检定 +12。"
+  },
+  {
+    "id": "t_farm",
+    "name": "神农后裔",
+    "tier": "blue",
+    "desc": "灵田劳作检定 +12。"
+  },
+  {
+    "id": "t_sect",
+    "name": "宗门栋梁",
+    "tier": "purple",
+    "desc": "宗门差事贡献与月俸翻倍。"
+  },
+  {
+    "id": "t_memory",
+    "name": "宿慧深种",
+    "tier": "gold",
+    "desc": "轮回时记忆判定额外 +10% 保留率（仍受上限约束）。"
+  },
+  {
+    "id": "t_break",
+    "name": "破关如喝水",
+    "tier": "purple",
+    "desc": "突破检定 +10。"
+  },
+  {
+    "id": "t_bounty",
+    "name": "赏金猎人",
+    "tier": "blue",
+    "desc": "镇魔关与论道台检定 +10。"
+  },
+  {
+    "id": "t_herb",
+    "name": "识药辨草",
+    "tier": "blue",
+    "desc": "探索中草木类机缘检定 +8。"
+  },
+  {
+    "id": "t_gamble",
+    "name": "赌徒之心",
+    "tier": "blue",
+    "desc": "坊市赌石检定 +12。"
+  }
+]

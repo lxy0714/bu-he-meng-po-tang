@@ -1,0 +1,58 @@
+{
+  "classicRealms": [
+    {
+      "name": "炼气",
+      "lifespan": 120,
+      "hp": 60,
+      "mp": 50
+    },
+    {
+      "name": "筑基",
+      "lifespan": 200,
+      "hp": 95,
+      "mp": 95
+    },
+    {
+      "name": "金丹",
+      "lifespan": 350,
+      "hp": 140,
+      "mp": 160
+    },
+    {
+      "name": "元婴",
+      "lifespan": 600,
+      "hp": 195,
+      "mp": 250
+    },
+    {
+      "name": "化神",
+      "lifespan": 1000,
+      "hp": 265,
+      "mp": 390
+    },
+    {
+      "name": "炼虚",
+      "lifespan": 1600,
+      "hp": 350,
+      "mp": 560
+    },
+    {
+      "name": "合体",
+      "lifespan": 2600,
+      "hp": 460,
+      "mp": 800
+    },
+    {
+      "name": "大乘",
+      "lifespan": 4000,
+      "hp": 600,
+      "mp": 1150
+    },
+    {
+      "name": "渡劫",
+      "lifespan": 6000,
+      "hp": 780,
+      "mp": 1600
+    }
+  ]
+}

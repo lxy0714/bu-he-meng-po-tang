@@ -1,0 +1,72 @@
+[
+  {
+    "id": "tech_qingmu",
+    "name": "青木长生功",
+    "desc": "木系养生功法，修炼收益 +15%。",
+    "bonusPct": 15,
+    "legacyCost": 2
+  },
+  {
+    "id": "tech_taixu",
+    "name": "太虚引气诀",
+    "desc": "引气入体如呼吸，修炼收益 +15%。",
+    "bonusPct": 15,
+    "legacyCost": 2
+  },
+  {
+    "id": "tech_xuanhuo",
+    "name": "玄火炼体术",
+    "desc": "以火炼体，修炼收益 +15%。",
+    "bonusPct": 15,
+    "legacyCost": 2
+  },
+  {
+    "id": "tech_bingxin",
+    "name": "冰心诀",
+    "desc": "心如寒冰，修炼收益 +15%。",
+    "bonusPct": 15,
+    "legacyCost": 2
+  },
+  {
+    "id": "tech_jingang",
+    "name": "金刚不坏体",
+    "desc": "横练功夫，修炼收益 +15%。",
+    "bonusPct": 15,
+    "legacyCost": 2
+  },
+  {
+    "id": "tech_leiyin",
+    "name": "紫霄雷引",
+    "desc": "引雷淬体，修炼收益 +20%。",
+    "bonusPct": 20,
+    "legacyCost": 3
+  },
+  {
+    "id": "tech_beiming",
+    "name": "北冥吞海诀",
+    "desc": "吞纳百川，修炼收益 +20%。",
+    "bonusPct": 20,
+    "legacyCost": 3
+  },
+  {
+    "id": "tech_xingchen",
+    "name": "星辰炼神篇",
+    "desc": "以星辉炼神，修炼收益 +20%。",
+    "bonusPct": 20,
+    "legacyCost": 3
+  },
+  {
+    "id": "tech_taiyin",
+    "name": "太阴素经",
+    "desc": "太阴之力，修炼收益 +25%。",
+    "bonusPct": 25,
+    "legacyCost": 4
+  },
+  {
+    "id": "tech_hundun",
+    "name": "混沌归元功",
+    "desc": "残篇古功，修炼收益 +25%。",
+    "bonusPct": 25,
+    "legacyCost": 4
+  }
+]

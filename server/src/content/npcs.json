@@ -1,0 +1,98 @@
+[
+  {
+    "id": "npc_liu",
+    "name": "柳青衣",
+    "title": "青衣修士",
+    "desc": "言辞犀利却不乏真知的论道之人，爱茶，爱较真。",
+    "kind": "friend",
+    "realm": 2
+  },
+  {
+    "id": "npc_atang",
+    "name": "阿棠",
+    "title": "采药姑娘",
+    "desc": "后山采药的姑娘，会酿梅子酒，笑起来眼睛弯成月牙。",
+    "kind": "partner",
+    "realm": 0
+  },
+  {
+    "id": "npc_xiaoman",
+    "name": "陈小满",
+    "title": "测灵少年",
+    "desc": "测灵台上被你一眼挑出的极品灵根少年，怯生生却肯吃苦。",
+    "kind": "disciple",
+    "realm": 0
+  },
+  {
+    "id": "npc_sweeper",
+    "name": "扫地老者",
+    "title": "山门扫地人",
+    "desc": "在山门口扫了几十年地的老者，眼睛浑浊时像蒙尘的剑。",
+    "kind": "master",
+    "realm": 6
+  },
+  {
+    "id": "npc_huiming",
+    "name": "慧明老僧",
+    "title": "云深寺住持",
+    "desc": "扫了六十年地的老僧，不谈功法，只说放下。",
+    "kind": "master",
+    "realm": 5
+  },
+  {
+    "id": "npc_tiesan",
+    "name": "铁三",
+    "title": "独眼炉主",
+    "desc": "坊市铁匠铺的独眼老头，脾气臭，手艺却是坊市第一。",
+    "kind": "friend",
+    "realm": 1
+  },
+  {
+    "id": "npc_jin",
+    "name": "金不换",
+    "title": "商队领队",
+    "desc": "走南闯北的商队领队，守诺重信，一诺值千金——所以叫金不换。",
+    "kind": "friend",
+    "realm": 1
+  },
+  {
+    "id": "npc_wen",
+    "name": "温如玉",
+    "title": "青云师姐",
+    "desc": "青云宗大师姐，温润如玉，剑法却是全宗最不留情的。",
+    "kind": "friend",
+    "realm": 2
+  },
+  {
+    "id": "npc_sun",
+    "name": "孙济世",
+    "title": "药铺掌柜",
+    "desc": "凡村药铺的老掌柜，医者仁心，赊账从不记名。",
+    "kind": "friend",
+    "realm": 1
+  },
+  {
+    "id": "npc_zhao",
+    "name": "赵铁山",
+    "title": "灵矿矿监",
+    "desc": "宗门灵矿的矿监，嗓门大，心细，护短。",
+    "kind": "friend",
+    "realm": 2
+  },
+  {
+    "id": "npc_lujz",
+    "name": "陆九章",
+    "title": "天骄榜前列",
+    "desc": "剑法凌厉的天骄，输得起人，输不起剑——被你胜过之后，怕是记了仇。",
+    "kind": "enemy",
+    "realm": 3
+  },
+  {
+    "id": "npc_yewuhen",
+    "name": "夜无痕",
+    "title": "独行散修",
+    "desc": "来无影去无踪的独行客，最恨旁人坏他的局。",
+    "kind": "enemy",
+    "realm": 2
+  }
+]

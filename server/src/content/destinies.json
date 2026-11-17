@@ -1,0 +1,125 @@
+[
+  {
+    "id": "d_fortune",
+    "name": "鸿运当头",
+    "desc": "机缘 +8。走路都能捡到灵石的命。",
+    "fortune": 8
+  },
+  {
+    "id": "d_sword",
+    "name": "剑心通明",
+    "desc": "战力 +5、神识 +3。天生与剑有缘。",
+    "might": 5,
+    "sense": 3
+  },
+  {
+    "id": "d_phoenix",
+    "name": "凤凰涅槃相",
+    "desc": "体魄 +4、寿元 +10%。命硬，越挫越勇。",
+    "body": 4,
+    "lifespanPct": 10
+  },
+  {
+    "id": "d_star",
+    "name": "七杀坐命",
+    "desc": "战力 +8、机缘 −4。杀伐之命，富贵险中求。",
+    "might": 8,
+    "fortune": -4
+  },
+  {
+    "id": "d_scholar",
+    "name": "文曲附体",
+    "desc": "神识 +8。过目不忘，悟性惊人。",
+    "sense": 8
+  },
+  {
+    "id": "d_wealth",
+    "name": "财星高照",
+    "desc": "开局灵石 +60、机缘 +3。",
+    "stones": 60,
+    "fortune": 3
+  },
+  {
+    "id": "d_longevity",
+    "name": "龟鹤延年",
+    "desc": "寿元 +20%、体魄 +2。活得久，就是本钱。",
+    "lifespanPct": 20,
+    "body": 2
+  },
+  {
+    "id": "d_diligent",
+    "name": "天道酬勤",
+    "desc": "修炼收益 +20%。笨鸟先飞，飞得还稳。",
+    "cultPct": 20
+  },
+  {
+    "id": "d_lonely",
+    "name": "天煞孤星",
+    "desc": "战力 +6、神识 +2、业力 −10。克亲克友，道途孤绝。",
+    "might": 6,
+    "sense": 2,
+    "karma": -10
+  },
+  {
+    "id": "d_kind",
+    "name": "积善之家",
+    "desc": "业力 +10、机缘 +3。祖上积德，余庆及身。",
+    "karma": 10,
+    "fortune": 3
+  },
+  {
+    "id": "d_fragile",
+    "name": "弱柳扶风",
+    "desc": "神识 +6、体魄 −4、寿元 −10%。体弱多思，慧极必伤。",
+    "sense": 6,
+    "body": -4,
+    "lifespanPct": -10
+  },
+  {
+    "id": "d_sturdy",
+    "name": "铜筋铁骨",
+    "desc": "体魄 +8。打不死的小强。",
+    "body": 8
+  },
+  {
+    "id": "d_wandering",
+    "name": "漂泊无定",
+    "desc": "机缘 +5、战力 +2。命如浮萍，处处是机缘。",
+    "fortune": 5,
+    "might": 2
+  },
+  {
+    "id": "d_noble",
+    "name": "贵人环绕",
+    "desc": "业力 +6、机缘 +4。出门遇贵人。",
+    "karma": 6,
+    "fortune": 4
+  },
+  {
+    "id": "d_plain",
+    "name": "平平无奇",
+    "desc": "无增无减。大道至简，平凡是福。"
+  },
+  {
+    "id": "d_calamity",
+    "name": "多灾多难",
+    "desc": "机缘 −5、寿元 −10%，但修炼收益 +15%。天将降大任于斯人。",
+    "fortune": -5,
+    "lifespanPct": -10,
+    "cultPct": 15
+  },
+  {
+    "id": "d_spirit",
+    "name": "灵台清明",
+    "desc": "神识 +5、机缘 +2。心魔难侵。",
+    "sense": 5,
+    "fortune": 2
+  },
+  {
+    "id": "d_war",
+    "name": "兵主临凡",
+    "desc": "战力 +6、体魄 +3。生来就是上战场的命。",
+    "might": 6,
+    "body": 3
+  }
+]

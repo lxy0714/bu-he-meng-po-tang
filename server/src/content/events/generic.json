@@ -1,0 +1,1864 @@
+[
+  {
+    "id": "beast",
+    "commonality": 10,
+    "title": "妖兽拦路",
+    "art": "realm",
+    "locations": [
+      "sect",
+      "realm",
+      "village",
+      "cave"
+    ],
+    "desc": "山道转弯处，一头青鳞妖蟒盘踞路中，吐着信子打量你——它身后是一株年份不低的灵芝。",
+    "options": [
+      {
+        "label": "拔剑迎战",
+        "hint": "战力检定",
+        "attr": "might",
+        "dc": 95,
+        "okText": "剑光过处，妖蟒授首。你剖出妖丹，又摘走灵芝，修为大进。",
+        "ok": {
+          "cult": 45,
+          "stones": 30,
+          "karma": 2
+        },
+        "failText": "妖蟒尾扫如鞭，你被抽飞撞在山岩上，拖着伤腿才逃下山。",
+        "fail": {
+          "hp": -30,
+          "age": 1
+        }
+      },
+      {
+        "label": "绕道潜行",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 80,
+        "okText": "你收敛气息贴着崖壁挪过去，顺手还摘了灵芝——妖蟒至始至终没抬头。",
+        "ok": {
+          "cult": 25,
+          "stones": 10
+        },
+        "failText": "刚挪到一半，妖蟒猛然回头。你弃了灵芝纵身跳崖，摔得不轻。",
+        "fail": {
+          "hp": -18
+        }
+      },
+      {
+        "label": "献上灵石买路",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 72,
+        "okText": "妖蟒竟通人性，衔了灵石让开道，临走还用尾巴尖把灵芝推给了你。",
+        "ok": {
+          "cult": 30,
+          "stones": -10,
+          "karma": 5
+        },
+        "failText": "它对灵石毫无兴趣，一口咬空你的钱袋，转身游回了洞里。",
+        "fail": {
+          "stones": -20
+        }
+      }
+    ]
+  },
+  {
+    "id": "elder",
+    "commonality": 10,
+    "title": "高人指点",
+    "art": "sect",
+    "locations": [
+      "sect",
+      "village"
+    ],
+    "desc": "一位扫地老者在山门口拦住你，浑浊的眼睛忽然精光一闪：「小娃娃，你这根骨……老夫好像在哪一世见过。」",
+    "options": [
+      {
+        "label": "恭敬请教",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 80,
+        "okText": "老者三言两语点破你功法的关窍，你茅塞顿开，当场盘膝入定三个时辰。",
+        "ok": {
+          "cult": 55
+        },
+        "failText": "老者说得云山雾罩，你似懂非懂，只记住了「回去多睡觉」五个字。",
+        "fail": {
+          "cult": 8
+        }
+      },
+      {
+        "label": "请他看本命法宝",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 88,
+        "okText": "老者摩挲法宝良久，弹入一道灵光：「替你温养过了。下一世，它还认得你。」",
+        "ok": {
+          "cult": 35,
+          "karma": 6,
+          "shard": 1
+        },
+        "failText": "老者摇头：「缘分未到。」转身扫地去了，背影深不可测。",
+        "fail": {
+          "karma": 2
+        },
+        "relOk": {
+          "npc": "npc_sweeper",
+          "kind": "master",
+          "bond": 30
+        }
+      }
+    ]
+  },
+  {
+    "id": "pill",
+    "commonality": 10,
+    "title": "丹房失火",
+    "art": "sect",
+    "locations": [
+      "sect",
+      "market",
+      "cave"
+    ],
+    "desc": "丹房方向浓烟滚滚，有弟子大喊炉鼎要炸——里面还有一炉刚成的好丹。",
+    "options": [
+      {
+        "label": "冲进去抢丹",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 95,
+        "okText": "你顶着火浪冲进去，连炉带丹抱了出来。长老感激涕零，分你一半成丹。",
+        "ok": {
+          "cult": 48,
+          "stones": 25,
+          "hp": -8
+        },
+        "failText": "炉鼎在你面前炸开，你被气浪掀出门外，躺了半个月。",
+        "fail": {
+          "hp": -32,
+          "age": 1
+        }
+      },
+      {
+        "label": "在外布雨灭火",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 88,
+        "okText": "你引动水汽化作细雨压住火势，丹房保住了，丹也保住了，人情更保住了。",
+        "ok": {
+          "cult": 30,
+          "karma": 8,
+          "mp": -15
+        },
+        "failText": "雨势太小，火借风起，你只能眼睁睁看着丹房烧成白地。",
+        "fail": {
+          "karma": -3,
+          "mp": -15
+        }
+      }
+    ]
+  },
+  {
+    "id": "storm",
+    "commonality": 4,
+    "title": "灵气风暴",
+    "art": "tribulation",
+    "locations": [
+      "realm",
+      "sect",
+      "cave"
+    ],
+    "desc": "天象骤变，方圆百里的灵气如潮汐般向你涌来——这是可遇不可求的灵气风暴，也是走火入魔的前兆。",
+    "options": [
+      {
+        "label": "迎风暴吐纳",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 102,
+        "okText": "你在风暴眼里稳坐如山，经脉被灵气冲刷得晶莹剔透，修为暴涨。",
+        "ok": {
+          "cult": 70,
+          "hp": -10
+        },
+        "failText": "灵气冲垮了一条经脉，你喷出一口血栽倒在地，醒来已是三天后。",
+        "fail": {
+          "hp": -38,
+          "cult": 15
+        }
+      },
+      {
+        "label": "退入洞府避锋芒",
+        "hint": "稳妥 · 无需检定",
+        "attr": "body",
+        "dc": 0,
+        "okText": "你关紧石门，听着外面灵气呼啸。风暴过后，洞口的灵草倒是疯长了一截，你顺手采了。",
+        "ok": {
+          "cult": 18,
+          "stones": 12
+        },
+        "failText": "",
+        "fail": {}
+      }
+    ]
+  },
+  {
+    "id": "sect_task",
+    "commonality": 10,
+    "title": "宗门任务",
+    "art": "sect",
+    "locations": [
+      "sect",
+      "arena"
+    ],
+    "desc": "任务堂新贴了告示：后山灵矿遭妖兽侵扰，清剿者得灵石百枚。再晚一步，矿脉就要停工了。",
+    "options": [
+      {
+        "label": "接下清剿任务",
+        "hint": "战力检定",
+        "attr": "might",
+        "dc": 92,
+        "okText": "你三日清完矿洞，妖兽皮毛还卖了个好价钱。任务堂把你的名字写进了功绩册。",
+        "ok": {
+          "cult": 35,
+          "stones": 110,
+          "karma": 4
+        },
+        "failText": "矿洞里的妖兽比告示上写的凶得多，你且战且退，任务黄了，还搭进去一身伤。",
+        "fail": {
+          "hp": -26,
+          "stones": -10
+        }
+      },
+      {
+        "label": "接护送药队任务",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 82,
+        "okText": "药队一路平安，你顺道采了几味野药，执事多给了你一成酬劳。",
+        "ok": {
+          "stones": 60,
+          "cult": 15
+        },
+        "failText": "半路遇上塌方，药材损了大半，你只领到一半酬劳。",
+        "fail": {
+          "stones": 20,
+          "age": 1
+        }
+      }
+    ]
+  },
+  {
+    "id": "alchemy",
+    "commonality": 10,
+    "title": "开炉炼丹",
+    "art": "cave",
+    "locations": [
+      "cave",
+      "sect",
+      "fields"
+    ],
+    "desc": "洞府里丹炉温热，药材齐备。你盘算着开一炉聚气丹——丹道一途，熟能生巧，轮回也带得走手艺。",
+    "options": [
+      {
+        "label": "开炉炼聚气丹",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 88,
+        "okText": "丹香满室，九颗聚气丹圆润如珠。你服下一颗，余下的收进丹匣。",
+        "ok": {
+          "cult": 55,
+          "stones": 10
+        },
+        "failText": "火候差了一线，一炉药材成了焦炭，洞府里三天都是糊味。",
+        "fail": {
+          "stones": -15,
+          "mp": -10
+        }
+      },
+      {
+        "label": "先炼培元散练手",
+        "hint": "稳妥 · 无需检定",
+        "attr": "sense",
+        "dc": 0,
+        "okText": "培元散成色平平，却稳稳当当。你把手感记在心里——手艺这东西，下一世也用得上。",
+        "ok": {
+          "cult": 22
+        },
+        "failText": "",
+        "fail": {}
+      }
+    ]
+  },
+  {
+    "id": "forging",
+    "commonality": 10,
+    "title": "炼器试手",
+    "art": "market",
+    "locations": [
+      "market",
+      "cave"
+    ],
+    "desc": "坊市铁匠铺招人打下手，炉主是个独眼老头：「帮我淬完这批剑胚，工钱之外，许你看我炼器。」",
+    "options": [
+      {
+        "label": "抡锤淬剑",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 90,
+        "okText": "三百锤下去剑胚嗡嗡作响，老头眯眼点头，塞给你一袋灵石，又指点了你淬火的关窍。",
+        "ok": {
+          "cult": 35,
+          "stones": 45
+        },
+        "failText": "淬火时手一抖，剑胚裂了。老头吹胡子瞪眼，工钱扣了一半。",
+        "fail": {
+          "hp": -10,
+          "stones": 10
+        }
+      },
+      {
+        "label": "只看不练",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 78,
+        "okText": "你盯着老头炼了三天器，手法步步记在心里，眼到手未到，却也不算白来。",
+        "ok": {
+          "cult": 25
+        },
+        "failText": "老头手法太快，你看得眼花，回去路上还在揉眼睛。",
+        "fail": {
+          "mp": -8
+        }
+      }
+    ]
+  },
+  {
+    "id": "farming",
+    "commonality": 10,
+    "title": "灵田农事",
+    "art": "fields",
+    "locations": [
+      "fields",
+      "village"
+    ],
+    "desc": "灵田里的青玉稻抽穗了。今年灵气足，若照料得当，收成能换不少灵石；若遭了虫害，就只能认栽。",
+    "options": [
+      {
+        "label": "下田除虫施肥",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 78,
+        "okText": "你顶着日头忙了半月，青玉稻颗粒饱满，卖了个好价钱，佃户们还分了你一坛灵酒。",
+        "ok": {
+          "stones": 55,
+          "cult": 18,
+          "karma": 3
+        },
+        "failText": "虫害比预想的凶，你抢收回来的还不到三成，只够交租。",
+        "fail": {
+          "stones": 8,
+          "age": 1
+        }
+      },
+      {
+        "label": "布聚灵小阵催熟",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 90,
+        "okText": "小阵一成，灵稻一夜拔高三寸。收成翻倍，管田的执事乐得合不拢嘴。",
+        "ok": {
+          "stones": 85,
+          "cult": 24,
+          "mp": -12
+        },
+        "failText": "阵纹刻错了一道，灵气倒灌，半亩田的稻子全蔫了。",
+        "fail": {
+          "stones": -10,
+          "mp": -18
+        }
+      }
+    ]
+  },
+  {
+    "id": "mining",
+    "commonality": 10,
+    "title": "灵矿采掘",
+    "art": "cave",
+    "locations": [
+      "cave",
+      "realm"
+    ],
+    "desc": "矿洞深处传来叮叮当当的回响，有人在采掘伴生灵矿。矿壁不稳，塌方与富矿往往只隔一层石皮。",
+    "options": [
+      {
+        "label": "下矿采掘",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 88,
+        "okText": "你挖出一窝品相极好的灵矿石，还顺手加固了矿道，矿监多分了你两成。",
+        "ok": {
+          "stones": 70,
+          "cult": 15
+        },
+        "failText": "头顶落石砸得你眼冒金星，好在命大，只伤了皮肉。",
+        "fail": {
+          "hp": -22
+        },
+        "loop": true
+      },
+      {
+        "label": "在矿口收矿石倒卖",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 82,
+        "okText": "你低买高卖倒腾了两批矿石，差价赚得稳稳当当，就是名声有点「奸商」。",
+        "ok": {
+          "stones": 45,
+          "karma": -2
+        },
+        "failText": "收来的矿石成色造假，你赔了一笔，还被矿监记了名。",
+        "fail": {
+          "stones": -30
+        }
+      }
+    ]
+  },
+  {
+    "id": "fellow",
+    "commonality": 10,
+    "title": "结识道友",
+    "art": "market",
+    "locations": [
+      "market",
+      "arena",
+      "sect"
+    ],
+    "desc": "茶棚里一位青衣修士正与人论道，言辞犀利却不乏真知。他见你听得入神，抬手邀你同坐。",
+    "options": [
+      {
+        "label": "同坐论道",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 84,
+        "okText": "一番论道下来，你与青衣修士互换传讯符，约好日后组队探秘境——多个朋友多条路。",
+        "ok": {
+          "cult": 32,
+          "karma": 7
+        },
+        "failText": "你插不上几句话，多半时间在点头。青衣修士笑笑，也没再说什么。",
+        "fail": {
+          "cult": 10
+        },
+        "relOk": {
+          "npc": "npc_liu",
+          "kind": "friend",
+          "bond": 30
+        }
+      },
+      {
+        "label": "请他喝灵茶",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 76,
+        "okText": "一壶灵茶下肚，他兴致大好，指点了你一处小机缘的门路，临走还回赠了一枚护身符。",
+        "ok": {
+          "cult": 28,
+          "stones": -15,
+          "karma": 9
+        },
+        "failText": "茶喝完了，他道声谢便走，连名字都没留下。",
+        "fail": {
+          "stones": -15,
+          "karma": 1
+        },
+        "relOk": {
+          "npc": "npc_liu",
+          "kind": "friend",
+          "bond": 25
+        }
+      }
+    ]
+  },
+  {
+    "id": "companion",
+    "commonality": 10,
+    "title": "道侣之约",
+    "art": "village",
+    "locations": [
+      "village",
+      "fields",
+      "sect"
+    ],
+    "desc": "山道上又遇见那位采药的姑娘。她说后山新开了一片野茶，问你要不要同去——修仙路上，有人同行总是好的。",
+    "options": [
+      {
+        "label": "结伴同行",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 80,
+        "okText": "一路说说笑笑，野茶采了满篓。她说起自家酿的梅子酒，约你明年花开时再来。这份牵挂，成了你修行路上的一点暖意。",
+        "ok": {
+          "cult": 24,
+          "karma": 10
+        },
+        "failText": "你紧张得只会聊天气，姑娘笑着说你这人真闷，茶倒还是分了你一半。",
+        "fail": {
+          "cult": 8,
+          "karma": 3
+        },
+        "relOk": {
+          "npc": "npc_atang",
+          "kind": "partner",
+          "bond": 40
+        }
+      },
+      {
+        "label": "赠她护身玉佩",
+        "hint": "稳妥 · 无需检定",
+        "attr": "fortune",
+        "dc": 0,
+        "okText": "你把温养多年的玉佩赠给她。她愣了愣，郑重收下：「你若哪天不修仙了，记得回村里来。」",
+        "ok": {
+          "karma": 12,
+          "stones": -20
+        },
+        "failText": "",
+        "fail": {}
+      }
+    ]
+  },
+  {
+    "id": "pet",
+    "commonality": 10,
+    "title": "灵兽认主",
+    "art": "realm",
+    "locations": [
+      "realm",
+      "fields",
+      "village"
+    ],
+    "desc": "草丛里钻出一只通体雪白的小兽，额间一点朱砂，围着你的脚边打转，赶也赶不走——这是灵兽择主之相。",
+    "options": [
+      {
+        "label": "喂它灵果结缘",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 78,
+        "okText": "小兽吃完灵果，纵身跳上你的肩头赖着不走。往后赶路修炼，它都蹲在旁边看，村里人都说你有仙缘。",
+        "ok": {
+          "cult": 26,
+          "karma": 8
+        },
+        "failText": "小兽吃完灵果，抹嘴跑了，跑了……你望着空空的果核发呆。",
+        "fail": {
+          "stones": -10
+        }
+      },
+      {
+        "label": "试着以神识沟通",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 92,
+        "okText": "神识相触的刹那，你「听」见一个奶声奶气的声音喊饿。契约既成，它成了你的灵兽伙伴。",
+        "ok": {
+          "cult": 34,
+          "karma": 6,
+          "mp": -10
+        },
+        "failText": "小兽被你的神识吓得炸毛，嗖地窜进草丛没了影。",
+        "fail": {
+          "mp": -8
+        }
+      }
+    ]
+  },
+  {
+    "id": "inheritance_clue",
+    "commonality": 4,
+    "title": "秘境传承线索",
+    "art": "realm",
+    "locations": [
+      "realm",
+      "cave"
+    ],
+    "desc": "你在石壁苔痕下发现半幅残图，图上标注着一处功法传承的藏匿点——可惜只有半幅，剩下的要靠悟。",
+    "options": [
+      {
+        "label": "按图索骥寻传承",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 100,
+        "okText": "补全残图的刹那，石壁无声移开。传承玉简入手，一门功法就此有了着落——就算这世用不上，也能留给下一世。",
+        "ok": {
+          "cult": 75,
+          "karma": 3,
+          "shard": 1
+        },
+        "failText": "你按残图转了三天，尽头只有一面石壁。也许，是时机未到。",
+        "fail": {
+          "age": 1,
+          "mp": -15
+        }
+      },
+      {
+        "label": "把残图拓下带走",
+        "hint": "稳妥 · 无需检定",
+        "attr": "sense",
+        "dc": 0,
+        "okText": "你仔细拓下残图收好。参不参得透是这辈子的事，带不带得走，是下辈子的事。",
+        "ok": {
+          "cult": 15,
+          "karma": 2
+        },
+        "failText": "",
+        "fail": {}
+      }
+    ]
+  },
+  {
+    "id": "temple_master",
+    "commonality": 10,
+    "title": "老僧论道",
+    "art": "temple",
+    "locations": [
+      "temple",
+      "village"
+    ],
+    "desc": "古刹后院，一位扫了六十年地的老僧忽然开口：「施主眉间有轮回之气。老衲不懂修仙，只懂放下——你放得下吗？」",
+    "options": [
+      {
+        "label": "与他对坐论道",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 86,
+        "okText": "老僧不谈功法，只说放下。你怔了半晌，忽然觉得压在心口几世的东西，轻了一点。",
+        "ok": {
+          "cult": 42,
+          "karma": 8
+        },
+        "failText": "你说了许多修行术语，老僧只是笑：「施主，放下，先放下。」你没听懂。",
+        "fail": {
+          "cult": 10
+        },
+        "relOk": {
+          "npc": "npc_huiming",
+          "kind": "master",
+          "bond": 30
+        }
+      },
+      {
+        "label": "问他长寿之法",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 80,
+        "okText": "老僧说：无他，少欲则寿长。临走赠你一包寺里自制的安神茶，你喝下后神清气爽。",
+        "ok": {
+          "cult": 30,
+          "karma": 5
+        },
+        "failText": "老僧摇头：「法不可轻传。」转身继续扫他的地，落叶扫了又落。",
+        "fail": {
+          "karma": 2
+        }
+      }
+    ]
+  },
+  {
+    "id": "border_icefish",
+    "commonality": 10,
+    "title": "冰湖垂钓",
+    "art": "ice",
+    "locations": [
+      "border",
+      "falls"
+    ],
+    "desc": "冰湖厚可跑马，凿开冰眼，湖底有银线冰鱼游弋——其肉大补气血，是北境修士的硬通货。",
+    "options": [
+      {
+        "label": "凿冰垂钓",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 88,
+        "okText": "冰鱼成群咬钩，你一口气钓起七条，自己吃两条，余下卖给边镇酒楼。",
+        "ok": {
+          "cult": 32,
+          "stones": 45
+        },
+        "failText": "你凿了五个冰眼，鱼影全无，倒是把棉裤冻透了。",
+        "fail": {
+          "age": 1,
+          "hp": -6
+        }
+      },
+      {
+        "label": "神识引鱼入网",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 96,
+        "okText": "你以神识模拟饵香，冰鱼自投罗网。这一网，顶别人钓一个月。",
+        "ok": {
+          "cult": 40,
+          "stones": 60,
+          "mp": -14
+        },
+        "failText": "神识惊动了湖底大物，冰面咔嚓裂开，你抱着渔网跳回岸边。",
+        "fail": {
+          "hp": -18,
+          "mp": -14
+        }
+      }
+    ]
+  },
+  {
+    "id": "sect_mine_guard",
+    "commonality": 10,
+    "title": "灵矿值守",
+    "art": "sect",
+    "locations": [
+      "sect",
+      "cave"
+    ],
+    "desc": "宗门灵矿招值守弟子，月钱不菲，但矿下时有地火喷涌与矿鼠成灾。管事说：干满一年，贡献大大的。",
+    "options": [
+      {
+        "label": "接下值守",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 90,
+        "okText": "你这一年镇住两次地火、清了三窝矿鼠，矿下安稳。管事在你的功绩册上重重记了一笔。",
+        "ok": {
+          "cult": 35,
+          "stones": 65,
+          "karma": 4
+        },
+        "failText": "地火喷涌时你正打盹，虽未酿成大祸，月钱还是被扣了大半。",
+        "fail": {
+          "hp": -15,
+          "stones": 15
+        }
+      },
+      {
+        "label": "只接巡查轻活",
+        "hint": "稳妥 · 无需检定",
+        "attr": "body",
+        "dc": 0,
+        "okText": "你巡查了一年，无功无过，月钱照拿——稳妥，也是一种修行。",
+        "ok": {
+          "stones": 30
+        },
+        "failText": "",
+        "fail": {}
+      }
+    ]
+  },
+  {
+    "id": "wandering_cultivator",
+    "commonality": 10,
+    "title": "散修斗法",
+    "art": "tribulation",
+    "locations": [
+      "market",
+      "wilds",
+      "border"
+    ],
+    "desc": "前方山道上，两名散修为一株灵草斗得正酣，法器乱飞，眼看就要出人命——劝架，还是捡漏？",
+    "options": [
+      {
+        "label": "出手调停",
+        "hint": "战力检定",
+        "attr": "might",
+        "dc": 92,
+        "okText": "你一剑分开二人，亮明修为。两人自知理亏，各退一步，还凑了份谢礼。",
+        "ok": {
+          "cult": 30,
+          "stones": 30,
+          "karma": 9
+        },
+        "failText": "你刚踏进战圈就被两人联手打了出来——原来人家打的是假架，钓的是你这种热心人。设局的独行客「夜无痕」在暗处记下了你的脸。",
+        "fail": {
+          "hp": -26,
+          "stones": -15
+        },
+        "relFail": {
+          "npc": "npc_yewuhen",
+          "kind": "enemy",
+          "bond": 40
+        }
+      },
+      {
+        "label": "袖手旁观等捡漏",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 84,
+        "okText": "两人两败俱伤先后遁走，灵草完好无损地留在原地。你叹口气，收了。",
+        "ok": {
+          "cult": 25,
+          "stones": 20,
+          "karma": -3
+        },
+        "failText": "两人打到一半忽然和好，联手把看热闹的你赶了出去。热闹，不是白看的。",
+        "fail": {
+          "karma": -2
+        }
+      }
+    ]
+  },
+  {
+    "id": "stray_cat",
+    "commonality": 10,
+    "title": "山门灵猫",
+    "art": "village",
+    "locations": [
+      "village",
+      "sect",
+      "temple",
+      "fields"
+    ],
+    "desc": "一只橘色灵猫蹲在路中央，脖子上挂着个小布囊，见人也不躲，只拿圆眼睛望着你——像是专程等你的。",
+    "options": [
+      {
+        "label": "解开布囊看看",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 78,
+        "okText": "布囊里是一颗温润的灵珠和一张字条：「猫已送到，珠归有缘。」字迹陌生，墨迹却新。",
+        "ok": {
+          "cult": 35,
+          "karma": 4
+        },
+        "failText": "布囊里只有一条小鱼干。猫打了个哈欠，叼回鱼干，扬长而去。",
+        "fail": {
+          "karma": 2
+        }
+      },
+      {
+        "label": "喂它一路跟回住处",
+        "hint": "稳妥 · 无需检定",
+        "attr": "fortune",
+        "dc": 0,
+        "okText": "你喂了它三条鱼干，它便赖上了你，此后常蹲在你修炼时旁观——村里人说，灵猫伴修，福气将至。",
+        "ok": {
+          "cult": 16,
+          "karma": 6
+        },
+        "failText": "",
+        "fail": {}
+      }
+    ]
+  },
+  {
+    "id": "dream_omen",
+    "commonality": 10,
+    "title": "前世托梦",
+    "art": "cave",
+    "locations": [
+      "cave",
+      "temple",
+      "village"
+    ],
+    "desc": "夜里你做了个极清晰的梦：梦里的「你」站在一棵老槐树下，反复念着一句话，醒来却只记得「槐树」二字。",
+    "options": [
+      {
+        "label": "寻村中老槐探究",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 90,
+        "okText": "树洞深处果然有东西：一只油布包着的旧册子，记着一门吐纳诀的残篇——是某一世的你，留给这一世的你。",
+        "ok": {
+          "cult": 52,
+          "karma": 3,
+          "shard": 1
+        },
+        "failText": "你把十里内的槐树都翻了一遍，只有鸟窝和树洞里的松鼠。梦，终究只是梦。",
+        "fail": {
+          "age": 1,
+          "mp": -10
+        }
+      },
+      {
+        "label": "把梦记进手札",
+        "hint": "稳妥 · 无需检定",
+        "attr": "sense",
+        "dc": 0,
+        "okText": "你把梦一字不落记进手札。记忆会骗人，字不会——这页手札，也许就是留给下一世的前尘残片。",
+        "ok": {
+          "cult": 18,
+          "karma": 2,
+          "shard": 1
+        },
+        "failText": "",
+        "fail": {}
+      }
+    ]
+  },
+  {
+    "id": "spirit_rain",
+    "commonality": 10,
+    "title": "灵雨甘霖",
+    "art": "fields",
+    "locations": [
+      "fields",
+      "village",
+      "falls"
+    ],
+    "desc": "一场灵雨毫无征兆地落下，雨丝里全是细碎的灵光。灵田里的作物疯长，修士们纷纷冲出屋子盘坐雨中。",
+    "options": [
+      {
+        "label": "立于雨中吐纳",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 88,
+        "okText": "灵雨洗体，你如老树逢春，经脉被冲刷得干干净净，修为水涨船高。",
+        "ok": {
+          "cult": 50,
+          "hp": -5
+        },
+        "failText": "灵雨太急，你贪多嚼不烂，经脉胀痛，只得退回檐下。",
+        "fail": {
+          "hp": -14,
+          "cult": 15
+        }
+      },
+      {
+        "label": "接雨水存入葫芦",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 82,
+        "okText": "你接了满满三葫芦灵雨水，卖给丹房作炼丹引子，小赚一笔。",
+        "ok": {
+          "stones": 48,
+          "cult": 15
+        },
+        "failText": "雨说停就停，你只接了小半葫芦，还不够塞牙缝。",
+        "fail": {
+          "age": 0
+        }
+      }
+    ]
+  },
+  {
+    "id": "old_tomb_map",
+    "commonality": 10,
+    "title": "藏宝残图",
+    "art": "realm",
+    "locations": [
+      "market",
+      "realm"
+    ],
+    "desc": "一个落魄散修以十灵石兜售半张藏宝图，说是自家祖传。图角画着半座山，朱砂批注：「宝在山腰，水在山前。」",
+    "options": [
+      {
+        "label": "买图寻宝",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 96,
+        "okText": "你对着山势水脉推了七日，终于在一处山腰石龛里找到前人藏的灵石与丹药——图是真的！",
+        "ok": {
+          "cult": 35,
+          "stones": 85
+        },
+        "failText": "你按图找了半月，山腰只有山，水前只有水。散修早已不见踪影。",
+        "fail": {
+          "stones": -10,
+          "age": 1
+        }
+      },
+      {
+        "label": "砍价到五灵石再买",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 84,
+        "okText": "散修咬牙卖了。图虽残，批注却是真的，你顺着线索小有所获，值回十倍票价。",
+        "ok": {
+          "cult": 25,
+          "stones": 40
+        },
+        "failText": "散修死活不肯降价，你转身要走，他在身后喊：三灵石！——可惜你已经走远了。",
+        "fail": {
+          "karma": 1
+        }
+      }
+    ]
+  },
+  {
+    "id": "rain_shelter",
+    "commonality": 10,
+    "title": "檐下避雨",
+    "art": "village",
+    "locations": [
+      "village",
+      "fields"
+    ],
+    "desc": "暴雨突至，你躲进村口凉亭避雨。亭里已有个卖伞的老汉，脚边蹲着一只湿透的黄狗，正眼巴巴望着雨幕。",
+    "options": [
+      {
+        "label": "送老汉回家",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 76,
+        "okText": "老汉是村里退隐的老药农，临别塞给你一把晒干的还阳草，说这比伞金贵。",
+        "ok": {
+          "cult": 22,
+          "karma": 4
+        },
+        "failText": "伞是漏的，你俩淋成落汤鸡。老汉抹了把脸，乐呵呵地说这叫有难同当。",
+        "fail": {
+          "hp": -6,
+          "karma": 2
+        }
+      },
+      {
+        "label": "檐下听雨悟道",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 80,
+        "okText": "雨声如磬，一声声敲在心上。一段滞涩已久的功法，竟在这雨声里悄然通了。",
+        "ok": {
+          "cult": 30
+        },
+        "failText": "雨声太催眠，你不知不觉睡了过去，醒来时鞋里灌满了水。",
+        "fail": {
+          "cult": 8
+        }
+      }
+    ]
+  },
+  {
+    "id": "herb_granny",
+    "commonality": 10,
+    "title": "采药婆婆",
+    "art": "fields",
+    "locations": [
+      "fields",
+      "wilds"
+    ],
+    "desc": "山道上，一位采药婆婆的竹篓翻了，药材撒了一地。她扶着腰唉声叹气，见了你像见了救星。",
+    "options": [
+      {
+        "label": "帮她拾药背下山",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 78,
+        "okText": "婆婆原是隐退多年的丹师，一路指点了你好几味药的炮制诀窍，字字都是钱买不来的经验。",
+        "ok": {
+          "cult": 35,
+          "karma": 5
+        },
+        "failText": "你手脚太慢，拾回的药材又被山风吹散大半，婆婆直摇头。",
+        "fail": {
+          "age": 1
+        }
+      },
+      {
+        "label": "买下她整篓药",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 74,
+        "okText": "整篓药里混着一株五十年份的血参，婆婆自己都没认出来，这回让你捡了漏。",
+        "ok": {
+          "cult": 30,
+          "stones": -25
+        },
+        "failText": "买回来细看，大半是寻常草根，只值回一半的价。",
+        "fail": {
+          "stones": -25,
+          "cult": 8
+        }
+      }
+    ]
+  },
+  {
+    "id": "river_ferry",
+    "commonality": 10,
+    "title": "渡口老艄公",
+    "art": "village",
+    "locations": [
+      "village",
+      "falls"
+    ],
+    "desc": "大河渡口，老艄公的渡船漏了水，他正蹲在船头补板。见你过来，他咧嘴一笑：「急不急？急就帮老汉搭把手。」",
+    "options": [
+      {
+        "label": "帮他补船渡河",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 76,
+        "okText": "船补好了，老艄公免了你的船钱，一路上讲了许多河神的旧事，你听得入神，神识都涨了几分。",
+        "ok": {
+          "cult": 24,
+          "karma": 4
+        },
+        "failText": "你越帮越忙，船板裂得更大，最后两人在浅滩里推了半个时辰的船。",
+        "fail": {
+          "hp": -8,
+          "age": 1
+        }
+      },
+      {
+        "label": "出灵石雇快船",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 80,
+        "okText": "快船如箭，你抢在日落前过了河，省下的功夫都用来打坐了。",
+        "ok": {
+          "cult": 28,
+          "stones": -15
+        },
+        "failText": "快船是快，就是颠得你五脏移位，下了船腿还发软。",
+        "fail": {
+          "stones": -15,
+          "hp": -6
+        }
+      }
+    ]
+  },
+  {
+    "id": "tea_stall",
+    "commonality": 10,
+    "title": "茶摊听书",
+    "art": "village",
+    "locations": [
+      "village",
+      "market"
+    ],
+    "desc": "路边茶摊上，说书人正讲到「老仙人三渡雷劫」，一围听众屏住了呼吸。你端起粗茶，耳朵竖了起来。",
+    "options": [
+      {
+        "label": "凝神细听",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 78,
+        "okText": "说书人讲的渡劫细节，竟与你功法里的几处关窍暗暗相合，你若有所悟。",
+        "ok": {
+          "cult": 32
+        },
+        "failText": "正讲到精彩处，说书人醒木一拍：「且听下回分解。」你抓心挠肝了一整天。",
+        "fail": {
+          "mp": -6
+        }
+      },
+      {
+        "label": "赏他两块灵石",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 74,
+        "okText": "说书人得了赏，凑近压低声音，把没舍得讲的那一段，单独说给了你听。",
+        "ok": {
+          "cult": 36,
+          "stones": -8,
+          "karma": 2
+        },
+        "failText": "说书人收了钱，讲的还是台面上那一套。茶摊老板在旁边笑你人傻钱多。",
+        "fail": {
+          "stones": -8
+        }
+      }
+    ]
+  },
+  {
+    "id": "lost_child",
+    "commonality": 10,
+    "title": "迷途小童",
+    "art": "village",
+    "locations": [
+      "village",
+      "temple"
+    ],
+    "desc": "山道上，一个五六岁的小童抱着只竹蜻蜓在哭，说跟阿娘走散了。远处的林子里，隐隐传来兽吼。",
+    "options": [
+      {
+        "label": "背他翻山寻母",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 80,
+        "okText": "你背着小童翻过两道山梁，终于寻到他阿娘。妇人千恩万谢，塞给你一包自家晒的灵枣。",
+        "ok": {
+          "cult": 20,
+          "karma": 8
+        },
+        "failText": "山路岔口太多，你带着小童在林子里绕到天黑，才被寻来的村民接应上。",
+        "fail": {
+          "age": 1,
+          "karma": 3
+        }
+      },
+      {
+        "label": "以神识探路",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 84,
+        "okText": "神识铺开，十里内的炊烟人家尽在心中，你直直地把孩子送回了家门口。",
+        "ok": {
+          "cult": 26,
+          "karma": 8
+        },
+        "failText": "神识扫过兽窝，惊起一群山猿，你抱起小童一路狂奔，鞋都跑掉一只。",
+        "fail": {
+          "hp": -10,
+          "karma": 4
+        }
+      }
+    ]
+  },
+  {
+    "id": "broken_bridge",
+    "commonality": 10,
+    "title": "断桥拦路",
+    "art": "falls",
+    "locations": [
+      "falls",
+      "wilds"
+    ],
+    "desc": "山洪冲断了吊桥，对岸就是你要去的药谷。桥桩还在，河水湍急，水里翻白肚皮的，是被冲下来的银鳞鱼。",
+    "options": [
+      {
+        "label": "踏断索飞渡",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 88,
+        "okText": "你踏着断索借力，三纵两跃过了河，半途还顺手捞了两条银鳞鱼。",
+        "ok": {
+          "cult": 30,
+          "stones": 25
+        },
+        "failText": "行至中途断索崩断，你一头栽进水里，被冲出二里地才爬上岸。",
+        "fail": {
+          "hp": -16
+        }
+      },
+      {
+        "label": "下水捞鱼",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 82,
+        "okText": "你在回水湾里扎了几个猛子，捞了满满一篓银鳞鱼——药谷还没到，先赚了一笔。",
+        "ok": {
+          "stones": 40,
+          "hp": -6
+        },
+        "failText": "鱼没捞着几条，倒被水底的水蛭叮了一腿的包。",
+        "fail": {
+          "hp": -10,
+          "stones": 8
+        }
+      }
+    ]
+  },
+  {
+    "id": "chess_elder",
+    "commonality": 10,
+    "title": "残局老叟",
+    "art": "temple",
+    "locations": [
+      "temple",
+      "village"
+    ],
+    "desc": "古刹门外的老槐树下，一个老叟守着一盘残局，见人就问：「敢不敢落一子？输了，替老夫扫三天院子。」",
+    "options": [
+      {
+        "label": "坐下与他对弈",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 90,
+        "okText": "你落子如飞，残局竟被你盘活了。老叟抚须大笑，顺口点拨了你几句修心的道理。",
+        "ok": {
+          "cult": 40,
+          "karma": 3
+        },
+        "failText": "三步之后你就被杀得丢盔卸甲，只好老老实实扫了三天院子——倒也扫出几分心静。",
+        "fail": {
+          "age": 1,
+          "cult": 12
+        }
+      },
+      {
+        "label": "送他一壶酒",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 78,
+        "okText": "老叟嗜酒，喝得高兴了，拉着你把残局的门道掰开揉碎，讲了个透。",
+        "ok": {
+          "cult": 34,
+          "stones": -10
+        },
+        "failText": "老叟喝了两口就醉倒打鼾，你守着他，一直守到月上中天。",
+        "fail": {
+          "stones": -10,
+          "age": 1
+        }
+      }
+    ]
+  },
+  {
+    "id": "sect_gate_guest",
+    "commonality": 10,
+    "title": "山门访客",
+    "art": "sect",
+    "locations": [
+      "sect",
+      "arena"
+    ],
+    "trio": true,
+    "desc": "一名背剑的散修在山门口与守门弟子争执不下，一把拉住路过的你，压着火气问：宗主可在山中？他是不是躲着不见我？你恰好知道——宗主正在后山闭关，短期不见外客。这话，说，还是不说？",
+    "options": [
+      {
+        "label": "如实相告",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 82,
+        "okText": "你坦然告知宗主闭关、短期不见外客，又替他把一封拜帖递了进去。散修怔了怔，抱拳道：「冲你这句实话，我等。」",
+        "ok": {
+          "cult": 20,
+          "karma": 6
+        },
+        "failText": "你话刚出口，他便疑你与宗门串通敷衍，拂袖而去，临走冷冷记下了你的模样。",
+        "fail": {
+          "mp": -8
+        },
+        "relOk": {
+          "npc": "npc_yewuhen",
+          "kind": "friend",
+          "bond": 20
+        },
+        "relFail": {
+          "npc": "npc_yewuhen",
+          "kind": "enemy",
+          "bond": 20
+        }
+      },
+      {
+        "label": "随口误导",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 78,
+        "okText": "你随手往后山禁地的方向一指，他深信不疑，兴冲冲去了——那地方只有巡山灵兽会招呼他。你耳根清净，只是这笔因果，怕是要记在你头上。",
+        "ok": {
+          "cult": 12,
+          "karma": -7
+        },
+        "failText": "他在山里转了半日，撞见巡山弟子问明原委，回来时看你的眼神像淬了冰。",
+        "fail": {
+          "karma": -5
+        },
+        "relFail": {
+          "npc": "npc_yewuhen",
+          "kind": "enemy",
+          "bond": 30
+        }
+      },
+      {
+        "label": "闭口不言",
+        "hint": "稳妥 · 无需检定",
+        "attr": "sense",
+        "dc": 0,
+        "okText": "你摇摇头，只说自己不知，绕道走了。身后的争执声渐渐远了——不沾因果，也就此错过了一段缘分。",
+        "ok": {},
+        "failText": "",
+        "fail": {}
+      }
+    ]
+  },
+  {
+    "id": "spirit_well",
+    "commonality": 10,
+    "title": "灵泉枯井",
+    "art": "cave",
+    "locations": [
+      "cave",
+      "fields"
+    ],
+    "desc": "洞府后山有一口古井，井水本带灵气，这几日却干了。井底隐隐有金石之声，像是什么东西卡在了泉眼上。",
+    "options": [
+      {
+        "label": "下井探查",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 86,
+        "okText": "卡住泉眼的，是一块拳头大的灵晶！你取走灵晶，泉水复涌，比从前还旺三分。",
+        "ok": {
+          "cult": 38,
+          "stones": 35
+        },
+        "failText": "井壁湿滑，你下到一半摔了个结实，只摸上来一手的青苔。",
+        "fail": {
+          "hp": -14
+        },
+        "loop": true
+      },
+      {
+        "label": "以神识引泉",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 90,
+        "okText": "你以神识为引，一寸寸打通淤塞的泉脉。灵气冲贯全身，通体舒泰。",
+        "ok": {
+          "cult": 44,
+          "mp": -10
+        },
+        "failText": "泉脉纹丝不动，你神识耗损不小，只得作罢。",
+        "fail": {
+          "mp": -16
+        }
+      }
+    ]
+  },
+  {
+    "id": "sect_beast_escape",
+    "commonality": 10,
+    "title": "灵兽出栏",
+    "art": "sect",
+    "locations": [
+      "sect",
+      "fields"
+    ],
+    "desc": "灵兽园的栅栏被拱开，一群灵角羊撒着欢往山下跑。饲养弟子追得满头大汗，远远冲你招手求援。",
+    "options": [
+      {
+        "label": "帮忙围堵羊群",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 80,
+        "okText": "你张开双臂堵住山口，羊群被你一一圈了回来。饲养弟子塞给你两瓶灵兽奶，喝下浑身暖洋洋的。",
+        "ok": {
+          "cult": 24,
+          "hp": 8
+        },
+        "failText": "你被领头羊顶了个趔趄，羊群从你身边呼啸而过——最后还是饲养弟子自己收的场。",
+        "fail": {
+          "hp": -10
+        }
+      },
+      {
+        "label": "学哨音唤回",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 86,
+        "okText": "你学着饲养弟子的哨音一吹，羊群竟真的排着队回来了。满园弟子看你的眼神都不一样了。",
+        "ok": {
+          "cult": 30,
+          "karma": 4
+        },
+        "failText": "哨音走了调，羊群受惊，跑得更远了。",
+        "fail": {
+          "mp": -8
+        }
+      }
+    ]
+  },
+  {
+    "id": "border_frozen_lake",
+    "commonality": 10,
+    "title": "冰湖裂缝",
+    "art": "ice",
+    "locations": [
+      "border",
+      "falls"
+    ],
+    "desc": "冰湖面上裂开一道缝，缝里透出幽蓝的光——湖底沉着东西。可冰层薄得踩上去咯吱作响，像随时会碎。",
+    "options": [
+      {
+        "label": "贴冰面爬过去",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 88,
+        "okText": "你贴着冰面一寸寸挪到裂缝边，捞出一匣沉湖多年的寒铁，沉甸甸的。",
+        "ok": {
+          "stones": 55,
+          "cult": 20
+        },
+        "failText": "才爬到一半，冰面咔嚓一声，你半个身子浸进冰水，爬上来时眉毛都结了霜。",
+        "fail": {
+          "hp": -16
+        }
+      },
+      {
+        "label": "以神识御物",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 94,
+        "okText": "你站在岸边，神识牵着飞剑探入裂缝，稳稳当当把寒铁匣勾了出来。",
+        "ok": {
+          "stones": 55,
+          "cult": 28
+        },
+        "failText": "神识探到一半被寒气冻得发僵，飞剑差点沉了底，好不容易才收回来。",
+        "fail": {
+          "mp": -14
+        }
+      }
+    ]
+  },
+  {
+    "id": "demon_ambush",
+    "commonality": 4,
+    "title": "魔修斥候",
+    "art": "tribulation",
+    "locations": [
+      "demonfront",
+      "wilds"
+    ],
+    "desc": "巡逻路上，草丛里伏着三名魔修斥候，正等着落单的守关人。你发现他们的同时，他们也发现了你。",
+    "options": [
+      {
+        "label": "先下手为强",
+        "hint": "战力检定",
+        "attr": "might",
+        "dc": 102,
+        "okText": "你抢先出手，一炷香内连破三人，还搜出魔修的布防图。献上关去，是大功一件。",
+        "ok": {
+          "cult": 62,
+          "stones": 50,
+          "karma": 5
+        },
+        "failText": "三名斥候配合默契，你以一敌三渐落下风，拼着挨了一刀才杀出重围。",
+        "fail": {
+          "hp": -34
+        }
+      },
+      {
+        "label": "放讯号唤援军",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 96,
+        "okText": "你一箭讯号上天，斥候见势不妙仓皇遁走。援军赶到时，只来得及夸你机警。",
+        "ok": {
+          "cult": 35,
+          "karma": 8
+        },
+        "failText": "讯号是放出去了，可援军来迟一步，斥候临走还回头给了你一记冷箭。",
+        "fail": {
+          "hp": -20
+        }
+      }
+    ]
+  },
+  {
+    "id": "alchemy_accident",
+    "commonality": 4,
+    "title": "丹炉异响",
+    "art": "cave",
+    "locations": [
+      "cave",
+      "sect"
+    ],
+    "desc": "你炼的这炉丹到了凝丹关头，炉身忽然嗡嗡作响，炉盖缝里喷出的不是丹香，是刺鼻的焦糊味——要炸炉了。",
+    "options": [
+      {
+        "label": "以法力压炉",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 100,
+        "okText": "你神识如网，压住暴走的灵气，硬生生把一炉废丹救回七成。经此一炉，你的控火之道大进。",
+        "ok": {
+          "cult": 58,
+          "mp": -15
+        },
+        "failText": "炉还是炸了，丹房的屋顶多了个洞。你从废墟里扒出两颗没炼坏的丹，聊以自慰。",
+        "fail": {
+          "hp": -18,
+          "cult": 14
+        }
+      },
+      {
+        "label": "撤人保命",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 94,
+        "okText": "你当机立断退出丹房，炉炸得震天响，人毫发无损。围观弟子说，这叫有大将之风。",
+        "ok": {
+          "karma": 4,
+          "cult": 20
+        },
+        "failText": "你退得慢了半步，被气浪掀了个跟头，眉毛燎掉了一半。",
+        "fail": {
+          "hp": -12
+        }
+      }
+    ]
+  },
+  {
+    "id": "sect_elder_test",
+    "commonality": 4,
+    "title": "长老考校",
+    "art": "sect",
+    "locations": [
+      "sect",
+      "arena"
+    ],
+    "desc": "传功长老今日在演武场考校弟子，被点到名的人要当众演一套功法。你刚走到场边，长老的目光就落在了你身上。",
+    "options": [
+      {
+        "label": "全力演功",
+        "hint": "战力检定",
+        "attr": "might",
+        "dc": 100,
+        "okText": "你一套功法演得行云流水，长老颔首，当众赏你一瓶培元丹，又点拨了三处运劲的关窍。",
+        "ok": {
+          "cult": 60,
+          "stones": 25
+        },
+        "failText": "你紧张得同手同脚，功法演到一半忘了下式。长老倒没怪罪，只说回去再练十年。",
+        "fail": {
+          "cult": 15,
+          "mp": -8
+        }
+      },
+      {
+        "label": "以问代演",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 104,
+        "okText": "你不演功，反把积攒的疑难一股脑问了出来。长老越答越喜，最后拉着你论了半日道。",
+        "ok": {
+          "cult": 66
+        },
+        "failText": "你的问题问得太偏，长老沉吟半天也没答上来，场面一度十分尴尬。",
+        "fail": {
+          "karma": 1
+        }
+      }
+    ]
+  },
+  {
+    "id": "falls_dragon",
+    "commonality": 4,
+    "title": "天河老蛟",
+    "art": "falls",
+    "locations": [
+      "falls",
+      "realm"
+    ],
+    "desc": "天河飞瀑的水潭里，探出一颗磨盘大的蛟首。老蛟口吐人言：「小娃娃，我这潭底压着件东西，你帮我挪开，我许你一桩好处。」",
+    "options": [
+      {
+        "label": "下潭挪镇水碑",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 104,
+        "okText": "潭底压着的是一块镇水碑，你拼尽全力挪开一线，老蛟脱困，吐出一颗蛟珠相赠。",
+        "ok": {
+          "cult": 65,
+          "stones": 60
+        },
+        "failText": "镇水碑纹丝不动，你在潭底憋得眼前发黑，被老蛟用尾巴卷了上来。",
+        "fail": {
+          "hp": -14
+        }
+      },
+      {
+        "label": "先谈条件再下水",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 98,
+        "okText": "你跟老蛟讨价还价，先收了半颗蛟珠作定金，才下水挪碑。老蛟直呼：现在的娃娃，不好骗喽。",
+        "ok": {
+          "cult": 50,
+          "stones": 45,
+          "karma": 2
+        },
+        "failText": "老蛟嫌你啰嗦，一个喷嚏把你冲出水潭，好处自然没了下文。",
+        "fail": {
+          "hp": -10
+        }
+      }
+    ]
+  },
+  {
+    "id": "sect_tournament_rival",
+    "commonality": 4,
+    "title": "内门晋升战",
+    "art": "sect",
+    "locations": [
+      "sect",
+      "arena"
+    ],
+    "desc": "内门晋升战最后一轮，你的对手，是与你积怨已久的陆九章。他活动着手腕冷笑：「今日，新账旧账一起算。」",
+    "options": [
+      {
+        "label": "正面决胜",
+        "hint": "战力检定",
+        "attr": "might",
+        "dc": 106,
+        "okText": "你十招之内连破他三式，把他打下擂台。他还不服气——这梁子，算是结深了。",
+        "ok": {
+          "cult": 55,
+          "stones": 30
+        },
+        "failText": "你棋差一着被他扫下擂台，他站在台上大笑。这笔账，你记下了。",
+        "fail": {
+          "hp": -16,
+          "cult": 12
+        },
+        "relOk": {
+          "npc": "npc_lujz",
+          "kind": "enemy",
+          "bond": 20
+        },
+        "relFail": {
+          "npc": "npc_lujz",
+          "kind": "enemy",
+          "bond": 35
+        }
+      },
+      {
+        "label": "以巧破力",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 100,
+        "okText": "你不与他硬碰，绕着擂台游走三十合，趁他力竭一招制胜。长老说，这叫善战者无赫赫之功。",
+        "ok": {
+          "cult": 58
+        },
+        "failText": "你的身法被他看穿，一把揪住衣领，扔出了擂台。",
+        "fail": {
+          "hp": -10
+        }
+      }
+    ]
+  },
+  {
+    "id": "wilds_king_cub",
+    "commonality": 4,
+    "title": "兽王幼崽",
+    "art": "wilds",
+    "locations": [
+      "wilds",
+      "village"
+    ],
+    "desc": "山道旁的草窝里，一只毛茸茸的兽王幼崽正啃自己的尾巴。远处山林里，成年兽王的低吼正在逼近。",
+    "options": [
+      {
+        "label": "速速离去",
+        "hint": "稳妥 · 无需检定",
+        "attr": "fortune",
+        "dc": 0,
+        "okText": "你一步三回头地退走。幼崽冲你奶声奶气地叫了一声——你决定假装没听见。",
+        "ok": {
+          "karma": 2
+        },
+        "failText": "",
+        "fail": {}
+      },
+      {
+        "label": "留灵果结善缘",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 100,
+        "okText": "你留下灵果退到远处。兽王赶到，嗅了嗅灵果，又深深看了你藏身的方向一眼——这一带的兽，从此见你绕道。",
+        "ok": {
+          "cult": 40,
+          "karma": 10
+        },
+        "failText": "你刚放下灵果，兽王就到了，一声吼震得你耳膜生疼，连滚带爬下了山。",
+        "fail": {
+          "hp": -18,
+          "karma": 4
+        }
+      }
+    ]
+  },
+  {
+    "id": "cave_inscription",
+    "commonality": 4,
+    "title": "洞壁古铭",
+    "art": "cave",
+    "locations": [
+      "cave",
+      "realm"
+    ],
+    "desc": "听涛洞府的支洞尽头，有人凿壁留铭。字迹被水汽蚀了大半，只剩零星几句，像是一门功法的总纲。",
+    "options": [
+      {
+        "label": "拓印参悟",
+        "hint": "神识检定",
+        "attr": "sense",
+        "dc": 102,
+        "okText": "你以神识补全缺字，竟拼出一门完整的炼神总纲，残缺处与你的功法正好互补。",
+        "ok": {
+          "cult": 64
+        },
+        "failText": "缺字太多，你补了三种读法都不通，只得先拓下来，日后再说。",
+        "fail": {
+          "mp": -12,
+          "cult": 10
+        }
+      },
+      {
+        "label": "临壁打坐",
+        "hint": "体魄检定",
+        "attr": "body",
+        "dc": 96,
+        "okText": "你对着古铭打坐三日。水汽蚀字的道理，竟与吐纳同源，你悟了。",
+        "ok": {
+          "cult": 52
+        },
+        "failText": "支洞阴冷，你坐了三日，悟没悟到不说，先染上了风寒。",
+        "fail": {
+          "hp": -10,
+          "cult": 12
+        }
+      }
+    ]
+  },
+  {
+    "id": "border_epidemic",
+    "commonality": 4,
+    "moral": true,
+    "title": "边关时疫",
+    "art": "ice",
+    "locations": [
+      "border",
+      "village"
+    ],
+    "desc": "边关小城闹起时疫，药铺门口排着长队。一位游方郎中忙得脚不沾地，看见你腰间的药囊，眼睛一亮。",
+    "options": [
+      {
+        "label": "协助施药熬汤",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 96,
+        "okText": "你帮着孙济世分药熬汤三日，疫气渐退。他临别赠你一册手抄的《济世方》，说：拿着，能救人。",
+        "ok": {
+          "cult": 45,
+          "karma": 12
+        },
+        "failText": "你帮了倒忙，打翻了两锅药汤。孙济世也不恼，只让你去劈柴赎罪。",
+        "fail": {
+          "age": 1,
+          "karma": 5
+        },
+        "relOk": {
+          "npc": "npc_sun",
+          "kind": "friend",
+          "bond": 30
+        }
+      },
+      {
+        "label": "趁疫囤药牟利",
+        "hint": "机缘检定",
+        "attr": "fortune",
+        "dc": 100,
+        "okText": "你把药囊里的存药翻了五倍价钱出手，排队的病患咬牙掏钱。消息传到孙济世耳中，他摔了药碾：从此，你我两清——不，是结仇。",
+        "ok": {
+          "stones": 70,
+          "karma": -12
+        },
+        "failText": "囤的药还没出手，疫气先找上了你，咳得撕心裂肺。孙济世听说了你的行径，只冷冷道：医者父母心，你不配。",
+        "fail": {
+          "hp": -10,
+          "karma": -6
+        },
+        "relOk": {
+          "npc": "npc_sun",
+          "kind": "enemy",
+          "bond": 25
+        },
+        "relFail": {
+          "npc": "npc_sun",
+          "kind": "enemy",
+          "bond": 20
+        }
+      }
+    ]
+  }
+]
