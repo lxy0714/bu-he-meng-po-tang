@@ -99,9 +99,6 @@ export function createDbSaveStorage(ctx: Ctx): SaveStorage {
 
 /** 上层取存储的统一入口：将来的本地缓存/HTTP 实现在此替换，上层不改。 */
 export function saveStorageFor(ctx: Ctx): SaveStorage {
-  // 独立版：ctx.db 已由 standalone/ctx.ts 接到本地 bun:sqlite 的
-  // drizzle 实例，createDbSaveStorage 的 SQL 形态原样适用——这正是
-  // 当初留 SaveStorage 抽象的目的：换宿主只换 ctx，上层一行不改。
   return createDbSaveStorage(ctx);
 }
 

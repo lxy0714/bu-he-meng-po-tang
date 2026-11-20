@@ -8,10 +8,12 @@
 // 口径（计划原文）：
 // - 时钟 = 天序（U-610/Q37：累计月份 × 每月天数 daysPerMonth，
 //   天数按月内折算、配置表定）：帖子挂板 postDays 天无人接取即过
-//   期沉底（结算「不接」声望，在 loadState 的 settleTimedEvents
-//   里到期结清）；接取时截止天序 = 当前天序 + limitDays，天序到
-//   达截止仍未办妥即超时失败（结算「败」声望，同在 settleTimed-
-//   Events 结清）；目标办妥即锁定成功，交帖领赏不再受时限约束。
+//   期沉底（不结算任何声望、不结仇、同帖本世不再重挂——2026-11
+//   -18 自测修复，原「不接」声望段自此不生效；在 loadState 的
+//   settleTimedEvents 里到期结清）；接取时截止天序 = 当前天序 +
+//   limitDays，天序到达截止仍未办妥即超时失败（结算「败」声望，
+//   同在 settleTimedEvents 结清）；目标办妥即锁定成功，交帖领赏
+//   不再受时限约束。
 // - 声望只复用现有字段：发布人的既有关系 bond（relations 情谊/
 //   仇怨）与既有宗门贡献 sectContrib（applyReputation 一处落账），
 //   接 / 不接 / 成 / 败四段数值全部出自配置表 timed-events.json。
@@ -28,13 +30,13 @@ import { defineAction, z } from "./platform";
 import { TIMED_EVENTS, locById, npcById, timedEventById } from "./data";
 import { formatEffectGains } from "./events";
 import {
-applyEffects, applyReputation, loadState, pushLog, saveState, timedDaysText, timedNowDay, timedObjectiveText, timedRepText,
+applyEffects, applyReputation, loadState, notePendingEventBlock, pushLog, saveState, timedDaysText, timedNowDay, timedObjectiveText, timedRepText,
 } from "./state";
 import { stateResponse, toResponse, type StateResponse } from "./respond";
 
 export const timedActions = {
   timedEvent: defineAction({
-    description: "限时帖（U-389 限时事件）：在帖子的张贴地点接取板上限时帖（接取结算接帖声望、同时可接数与时限见配置表，时限按天/月计——截止天序=接取天序+时限天数，时钟走累计月份折算）、目标在限期内办妥后回张贴地点交帖领赏并结算成功声望与奖励（奖励走既有字段）、或主动撕帖爽约（按失败声望结算）；超时失败与挂帖过期不接的声望在读档时自动结清。",
+    description: "限时帖（U-389 限时事件）：在帖子的张贴地点接取板上限时帖（接取结算接帖声望、同时可接数与时限见配置表，时限按天/月计——截止天序=接取天序+时限天数，时钟走累计月份折算）、目标在限期内办妥后回张贴地点交帖领赏并结算成功声望与奖励（奖励走既有字段）、或主动撕帖爽约（按失败声望结算）；已接帖超时失败的声望在读档时自动结清，未接取的挂帖过期只沉底、不结算声望且本世不再重挂。",
     request: z.object({
       kind: z.enum(["accept", "claim", "abandon"]),
       timedId: z.string().min(1).max(60),
@@ -43,7 +45,10 @@ export const timedActions = {
     async handler(ctx, args): Promise<StateResponse> {
       const state = await loadState(ctx);
       const c = state.character;
-      if (!c || c.dead || c.pendingEvent || c.route || !c.timedEvents) return toResponse(state);
+      if (!c || c.dead) return toResponse(state);
+      // 待决守卫排在 route 早退之前（同 actions-play forgeArtifact 注释）。
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
+      if (c.route || !c.timedEvents) return toResponse(state);
       const ts = c.timedEvents;
       const def = timedEventById(args.timedId);
       if (!def) return toResponse(state);
@@ -56,7 +61,7 @@ export const timedActions = {
         if (!ts.board.some((p) => p.id === def.id)) return toResponse(state);
         if (ts.active.some((a) => a.id === def.id)) return toResponse(state);
         if (!atBoard) {
-          pushLog(state, c.lifeNo, "hint", `这张限时帖贴在「${boardLoc?.name ?? def.boardLocationId}」——要接，先去那里揭帖。帖子挂板有时限，过期不接声望照样受影响，别拖太久。`);
+          pushLog(state, c.lifeNo, "hint", `这张限时帖贴在「${boardLoc?.name ?? def.boardLocationId}」——要接，先去那里揭帖。帖子挂板有时限，过期便沉底作罢（不接不罚），别拖太久。`);
           await saveState(ctx, state);
           return toResponse(state);
         }

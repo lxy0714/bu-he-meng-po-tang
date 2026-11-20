@@ -3,12 +3,13 @@
 
 import { z } from "./platform";
 import {
-ARTIFACTS, CLASSIC_REALMS, COMMISSIONS, CRAFT_KINDS, CRAFT_SKILLS, CURRENT_EVENT_VERSION, DAILY_COMMISSIONS, DESTINIES, ENEMIES, EVENT_PACKS, EVENT_RELEASES, FORGE, LOCATION_DROPS, LOCATIONS, MAINLINE_CHAPTERS, MAINLINE_TOTAL_SHARDS, NAME_POOL, ORIGIN_POOL, REINCARNATION_POINTS, SEALED_EGGS, SECT_RANKS, SHOP, SIGN_INS, STAGES, TALENTS, TIME_COSTS, TREASURES, TIMED_EVENTS,
-artifactById, caveUpgradeCost, combatDc, commissionById, commissionGrantFor, craftLevelDefFor, craftNextLevelDef, craftProficiencyFor, craftYieldPctFor, dailyCommissionById, destinyById, dropTierDef, eventPackOf, eventReleaseVersion, forgeCandidatesFor, locById, npcById, sectGrantForRank, sectRankById, shopPrice, talentById, techById, timeCostMonths, timedEventById, travelMonthsTo, treasureById,
+ARTIFACTS, CLASSIC_REALMS, COMMISSIONS, CRAFT_KINDS, CRAFT_SKILLS, CURRENT_EVENT_VERSION, DAILY_COMMISSIONS, DESTINIES, ENEMIES, EVENT_PACKS, EVENT_RELEASES, FORGE, LOCATION_DROPS, LOCATIONS, MAINLINE_CHAPTERS, MAINLINE_TOTAL_SHARDS, NAME_POOL, NO_ROOT_ID, ORIGIN_POOL, REINCARNATION_POINTS, SEALED_EGGS, SECRET_REALMS, SECT_RANKS, SHOP, SIGN_INS, STAGES, TALENTS, TECHNIQUES, TECHNIQUE_MASTERY, TIME_COSTS, TREASURES, TIMED_EVENTS,
+artifactById, caveUpgradeCost, combatDc, commissionById, commissionGrantFor, craftLevelDefFor, craftNextLevelDef, craftProficiencyFor, craftYieldPctFor, dailyCommissionById, destinyById, dropTierDef, eventPackOf, eventReleaseVersion, exploreDensityWord, forgeCandidatesFor, imprintValuesFor, locById, npcById, sectGrantForRank, sectRankById, shopPrice, talentById, techById, techGradeRank, techLayerBreakdown, techTotalPoints, timeCostMonths, timedEventById, travelMonthsTo, treasureById,
+type TechDef,
 type TimeCostKey,
 } from "./data";
 import { EVENTS, formatEffectGains, type Effect } from "./events";
-import { commissionObjectiveText, dailyBatchIsCurrent, dailyObjectiveText, decayMult, forgeGateFor, locUnlocked, oreCountFor, realmsFor, signInRevisitText, signInRewardText, threshold, timedDaysText, timedNowDay, timedObjectiveText, timedRepText, weekKeyOf, type Character, type GameState, type Settings } from "./state";
+import { codexImprintOf, commissionObjectiveText, dailyBatchIsCurrent, dailyObjectiveText, decayMult, forgeGateFor, imprintLabelFor, locUnlocked, oreCountFor, realmsFor, signInRevisitText, signInRewardText, techEffectiveBonusPctOf, techProgressOf, threshold, timedDaysText, timedNowDay, timedObjectiveText, timedRepText, weekKeyOf, type Character, type GameState, type Settings } from "./state";
 
 // ---------- zod shapes ----------
 
@@ -151,6 +152,42 @@ const characterShape = z.object({
   // U-464 锻造矿石：本世七阶矿石持有数（存档原始字段，键 = 矿石
   // id）；锻造台与坊市矿行的整形在顶层 forge 段。
   ores: z.record(z.string(), z.number()),
+  // U-612 功法熟练度；U-626 改层数口径：techProgress 为存档原始
+  // 字段（键 = 功法 id，值 = {points 总点数, mastered 精通标记}）；
+  // techniqueProgress 为服务端按配置表（techniques.json 的品阶/
+  // 总层数 + technique-mastery.json 的每层点数）对当前修习功法
+  // 整形的面板——品阶/总点数/当前层/层内点/每层点数/总层数/总
+  // 点数（无限层时后两者为 null）/精通标记/基础加成/有效加成
+  // （精通后上升一档）。未习功法时 techniqueProgress 为 null。
+  // 只读展示：攒点结算在斗法与修炼里由服务端按同一份配置执行。
+  techProgress: z.record(z.string(), z.object({ points: z.number(), mastered: z.boolean(), relearned: z.boolean().optional(), relearnImprint: z.number().optional() })),
+  techniqueProgress: z.object({
+    grade: z.string(),
+    // U-627：功法类型（法修 = 引气类 / 体修 = 炼体类）。
+    kind: z.string(),
+    points: z.number(), layer: z.number(), layerPoints: z.number(),
+    pointsPerLayer: z.number(), totalLayers: z.number().nullable(), totalPoints: z.number().nullable(),
+    mastered: z.boolean(),
+    bonusPct: z.number(), effectiveBonusPct: z.number(), masteryStepPct: z.number(),
+    // U-086：本世这门功法是否为图鉴重学（涨幅带加成中）。
+    relearned: z.boolean(),
+  }).nullable(),
+  // U-613 功法页：本世已学功法列表（功法槽只有一门——学到的即
+  // 修习中、生效中；另含 techProgress 里留有记录的功法）。每门带
+  // 名称/说明/品阶/基础加成/有效加成（精通升档后的实际值）/层
+  // 数进度/精通标记/是否生效中，功法页只展示；未学功法不下
+  // 发、不混入。
+  techniques: z.array(z.object({
+    id: z.string(), name: z.string(), desc: z.string(), grade: z.string(),
+    // U-627：功法类型（法修 = 引气类 / 体修 = 炼体类），功法页小字标识。
+    kind: z.string(),
+    bonusPct: z.number(), effectiveBonusPct: z.number(),
+    points: z.number(), layer: z.number(), layerPoints: z.number(),
+    pointsPerLayer: z.number(), totalLayers: z.number().nullable(), totalPoints: z.number().nullable(),
+    mastered: z.boolean(), masteryStepPct: z.number(), active: z.boolean(),
+    // U-086：本世这门功法是否为图鉴重学（起始点数已给、涨幅带加成）。
+    relearned: z.boolean(),
+  })),
 });
 const talentShape = z.object({ id: z.string(), name: z.string(), tier: z.string(), desc: z.string() });
 const birthChoiceShape = z.object({ pool: z.array(z.string()), value: z.string(), random: z.boolean() });
@@ -169,9 +206,31 @@ const reincarnationShape = z.object({
     kind: z.string(), id: z.string(), name: z.string(), desc: z.string(), cost: z.number(),
     minRealm: z.number().optional(), minRealmName: z.string().optional(),
     locked: z.boolean().optional(), lockReason: z.string().optional(),
+    // U-626：仅功法候选带品阶标识。
+    grade: z.string().optional(),
   })),
   keepsakes: z.array(z.object({ kind: z.string(), id: z.string(), name: z.string(), locationId: z.string() })),
   keptCost: z.number(),
+  // U-614：免费带走候选（图鉴曾精通功法，带印记衰减结算后的强
+  // 度 t 与按 t 换算的待遇；图鉴无曾精通时为空数组）与已选定的
+  // 免费带走功法 id（未选为空串——响应层把存档的 null 收敛成空
+  // 串，客户端据此判已选）。已免费带走的那一门已从
+  // keepsakeCandidates 里过滤、不再出现在赎回候选里（整形处过
+  // 滤，存档候选池不动以便改选时恢复）。
+  // U-626：带走待遇的开局起点按层数整形（startPoints 总点数 +
+  // startLayer/startLayerPoints 派生层数），并带品阶标识。
+  freeTechniqueCandidates: z.array(z.object({
+    id: z.string(), name: z.string(), desc: z.string(), grade: z.string(),
+    imprint: z.number(), imprintLabel: z.string(),
+    startPoints: z.number(), startLayer: z.number(), startLayerPoints: z.number(),
+    pointsPerLayer: z.number(), totalLayers: z.number().nullable(),
+    gainBonusPct: z.number(),
+  })),
+  freeTechniqueId: z.string(),
+  // U-627：下一世灵根是否为无灵根——为真时引气类功法已从赎回/
+  // 免费带走候选下发里过滤（整形处过滤，存档候选池不动，改灵
+  // 根后自动恢复），面板据此显示「无灵根，无法引气」说明。
+  noRootNext: z.boolean(),
   chosenOrigin: z.string().nullable(),
   memoryKept: z.boolean(), memoryNote: z.string(),
   artifactShattered: z.boolean(),
@@ -279,7 +338,7 @@ export const stateResponse = z.object({
   realmNames: z.array(z.string()),
   stageNames: z.array(z.string()),
   threshold: z.number(),
-  locations: z.array(z.object({ id: z.string(), name: z.string(), locked: z.boolean(), lockReason: z.string(), decayPct: z.number() })),
+  locations: z.array(z.object({ id: z.string(), name: z.string(), locked: z.boolean(), lockReason: z.string(), decayPct: z.number(), densityWord: z.string() })),
   mainline: z.object({
     shards: z.number(), total: z.number(), done: z.boolean(),
     chapters: z.array(z.object({ title: z.string(), text: z.string(), need: z.number(), unlocked: z.boolean() })),
@@ -325,6 +384,35 @@ export const stateResponse = z.object({
     total: z.number(), signedCount: z.number(),
     codexCount: z.number(), codexTotal: z.number(),
     spots: z.array(signInItemShape),
+  }),
+  // U-086 知识图鉴（跨世）：已收录功法数 / 曾精通数、印记换算
+  // 参数（与服务端结算同一份配置表）、条目列表（只含真实收录
+  // 的功法：名称/说明/基础加成/是否曾精通/是否本世修习中/印记
+  // 强度与按当前 t 换算的重学待遇）。没有接取动作：收录与加成
+  // 由服务端在学会与熟练度结算时执行，客户端只展示。
+  knowledgeCodex: z.object({
+    count: z.number(), masteredCount: z.number(),
+    // U-614：印记换算参数（与服务端结算同一份配置表）：满印记
+    // （t=100）与下限（t=0）两端的待遇 + 衰减除数，图鉴页据此写
+    // 明规则；每门曾精通功法的当前待遇在条目里按其 t 换算下发。
+    // U-626：满印记起始待遇改占比口径（imprintFullStartPct =
+    // 总进度的百分比，落盘时按各功法总点数换算成层数）。
+    imprintFullStartPct: z.number(), imprintFullGainPct: z.number(),
+    imprintFloorGainPct: z.number(), imprintDecayDivisor: z.number(),
+    entries: z.array(z.object({
+      id: z.string(), name: z.string(), desc: z.string(), bonusPct: z.number(), grade: z.string(),
+      // U-627：功法类型（法修 = 引气类 / 体修 = 炼体类），图鉴小字标识。
+      kind: z.string(),
+      mastered: z.boolean(), current: z.boolean(),
+      // U-614：印记强度 t（未精通过的条目无印记、恒按满值下发待
+      // 遇口径值 100）、深浅展示名、按当前 t 换算的重学待遇。
+      // U-626：重学起点按层数下发（relearnStartPoints 总点数 +
+      // relearnStartLayer/relearnStartLayerPoints 派生层数）。
+      imprint: z.number(), imprintLabel: z.string(),
+      relearnStartPoints: z.number(), relearnStartLayer: z.number(), relearnStartLayerPoints: z.number(),
+      pointsPerLayer: z.number(), totalLayers: z.number().nullable(),
+      relearnGainBonusPct: z.number(),
+    })),
   }),
   // U-393 封印之蛋：收集物总数、已拾数（跨世）、集齐门槛、距下一
   // 条线索还差几枚、全部蛋（埋藏地点/是否已拾/是否正在此地）、已
@@ -398,6 +486,19 @@ export const stateResponse = z.object({
     costs: z.array(z.object({ key: z.string(), label: z.string(), months: z.number() })),
     travel: z.array(z.object({ locationId: z.string(), locationName: z.string(), months: z.number() })),
   }),
+  // U-401 秘境探索：三界秘境的固定掉落槽与隐藏 Boss 本世状态——
+  // 丹药槽（丹药名/数量/是否已领）、典籍槽（品阶/是否已领）、
+  // Boss（名号/出场文案/前置是否已触发/是否已击败）与两概率。
+  // 只读展示：触发与结算在探索动作里由服务端按同一份配置执行。
+  secretRealms: z.object({
+    slotChancePct: z.number(), bossChancePct: z.number(),
+    realms: z.array(z.object({
+      locationId: z.string(), locationName: z.string(), atLocation: z.boolean(),
+      pillName: z.string(), pillCount: z.number(), pillClaimed: z.boolean(),
+      techGrade: z.string(), techClaimed: z.boolean(),
+      bossName: z.string(), bossIntro: z.string(), bossReady: z.boolean(), bossDefeated: z.boolean(),
+    })),
+  }),
 });
 type StateResponse = z.infer<typeof stateResponse>;
 type CharacterResponse = z.infer<typeof characterShape>;
@@ -413,6 +514,17 @@ function commissionRewardText(commissionId: string, reward: Effect): string {
   const def = artifactById(grant.artifactId);
   const note = `另赠法宝「${def?.name ?? grant.artifactId}」（${def?.desc ?? ""}已有本命法宝时折作${formatEffectGains(grant.occupiedFallback)}）`;
   return base ? `${base}；${note}` : note;
+}
+
+// U-626：功法层数进度整形——总点数经配置表分解为当前层/层内点
+// （techLayerBreakdown），品阶与总层数/总点数一并下发（无限层
+// 时后两者为 null）。techniqueProgress 与 techniques 共用。
+function techLayerShape(tech: TechDef, points: number) {
+  const b = techLayerBreakdown(tech, points);
+  return {
+    grade: tech.grade, points: b.points, layer: b.layer, layerPoints: b.layerPoints,
+    pointsPerLayer: b.pointsPerLayer, totalLayers: b.totalLayers, totalPoints: b.totalPoints,
+  };
 }
 
 function toCharacter(c: Character, settings: Settings): CharacterResponse {
@@ -440,6 +552,42 @@ function toCharacter(c: Character, settings: Settings): CharacterResponse {
     } : null,
     talentNames: c.talentIds.map((id) => talentById(id)?.name ?? id),
     techniqueName: techById(c.techniqueId)?.name ?? "",
+    // U-612/U-626：当前修习功法的层数面板整形——总点数与精通标
+    // 记读存档字段 techProgress，层数分解/品阶/每层点数读配置
+    // 表，有效加成按精通档口径（精通 = 基础 bonusPct + 档步长）
+    // 现算，客户端只展示。
+    techniqueProgress: (() => {
+      const tech = techById(c.techniqueId);
+      if (!tech) return null;
+      const tp = techProgressOf(c, tech.id);
+      return {
+        ...techLayerShape(tech, tp.points),
+        kind: tech.kind,
+        mastered: tp.mastered,
+        bonusPct: tech.bonusPct, effectiveBonusPct: techEffectiveBonusPctOf(c, tech),
+        masteryStepPct: TECHNIQUE_MASTERY.masteryBonusStepPct,
+        relearned: !!tp.relearned,
+      };
+    })(),
+    // U-613：已学功法列表整形——与 techniqueProgress 同源同口径
+    // （techProgressOf / techEffectiveBonusPctOf / 配置表），只读
+    // 展示、不参与任何结算：生效中（当前修习）的排首位，其余按
+    // 品阶由高到低（U-626）、同品阶按功法配置表顺序。
+    techniques: TECHNIQUES
+      .filter((t) => c.techniqueId === t.id || (c.techProgress ? t.id in c.techProgress : false))
+      .map((t) => {
+        const tp = techProgressOf(c, t.id);
+        return {
+          id: t.id, name: t.name, desc: t.desc, kind: t.kind,
+          bonusPct: t.bonusPct, effectiveBonusPct: techEffectiveBonusPctOf(c, t),
+          ...techLayerShape(t, tp.points),
+          mastered: tp.mastered,
+          masteryStepPct: TECHNIQUE_MASTERY.masteryBonusStepPct,
+          active: c.techniqueId === t.id,
+          relearned: !!tp.relearned,
+        };
+      })
+      .sort((a, b) => Number(b.active) - Number(a.active) || techGradeRank(b.grade) - techGradeRank(a.grade)),
     destinyName: destiny?.name ?? "",
     destinyDesc: destiny?.desc ?? "",
     sectRankName: sectRankById(c.sectRankId)?.name ?? "",
@@ -465,6 +613,13 @@ function toCharacter(c: Character, settings: Settings): CharacterResponse {
 }
 export function toResponse(state: GameState): StateResponse {
   const c = state.character;
+  // U-627：下一世灵根预览（与 actions-life 的 nextLifeRootId 同口
+  // 径：Q2 锁定优先、否则降生抽选当前值）——结算中且下一世为无
+  // 灵根时，引气类功法从赎回/免费带走候选下发里过滤（存档候选
+  // 池不动，改选灵根后自动恢复显示）。
+  const q2v = state.settings.q2.value;
+  const nextRootId = q2v === "waste_root" ? "waste" : q2v === "reborn" ? "heaven" : state.birthDraw?.root.value;
+  const noRootNext = !!state.reincarnation && nextRootId === NO_ROOT_ID;
   const wk = weekKeyOf(new Date());
   const counts = c && c.weekKey === wk ? c.groupCounts : {};
   return {
@@ -481,12 +636,39 @@ export function toResponse(state: GameState): StateResponse {
       pointsEarned: state.reincarnation.pointsEarned,
       shardPointsEarned: state.reincarnation.shardPointsEarned ?? 0,
       shardsThisLife: state.reincarnation.shardsThisLife ?? 0,
-      keepsakeCandidates: state.reincarnation.keepsakeCandidates,
+      // U-614：已免费带走的那一门从赎回候选下发里过滤（存档候选
+      // 池不动，改选/取消免费带走后自动恢复显示）；keptCost 仍按
+      // 存档候选池全量查价（下方），账目不受过滤影响。
+      keepsakeCandidates: state.reincarnation.keepsakeCandidates.filter((k) => !(k.kind === "technique" && state.reincarnation?.freeTechniqueId && k.id === state.reincarnation.freeTechniqueId) && !(noRootNext && k.kind === "technique" && techById(k.id)?.kind === "法修")),
       keepsakes: state.reincarnation.keepsakes.map((k) => ({
         kind: k.kind, id: k.id,
         name: k.kind === "artifact" ? (ARTIFACTS.find((a) => a.id === k.id)?.name ?? k.id) : k.kind === "technique" ? (techById(k.id)?.name ?? k.id) : (treasureById(k.id)?.name ?? k.id),
         locationId: k.locationId ?? "",
       })),
+      // U-626：候选开局起点按层数整形；U-626 前生成的旧结算快照
+      // 只有 startProf（0–100 口径）时，按该功法总点数等比例换算
+      // 回 startPoints 再分解（总点数为 null 的无限层走防护兜底，
+      // 见 legacyProfToPoints 同口径——此处直接按占比给点）。
+      freeTechniqueCandidates: (state.reincarnation.freeTechniqueCandidates ?? []).filter((f) => !(noRootNext && techById(f.id)?.kind === "法修")).map((f) => {
+        const tech = techById(f.id);
+        const total = tech ? techTotalPoints(tech) : null;
+        const startPoints = typeof f.startPoints === "number" && Number.isFinite(f.startPoints)
+          ? f.startPoints
+          : typeof f.startProf === "number" && Number.isFinite(f.startProf)
+            ? (total !== null ? Math.floor(Math.min(100, Math.max(0, f.startProf)) / 100 * total) : Math.floor(f.startProf))
+            : 0;
+        const b = tech ? techLayerBreakdown(tech, startPoints) : null;
+        return {
+          id: f.id, name: f.name, desc: f.desc, grade: tech?.grade ?? "",
+          imprint: f.imprint, imprintLabel: imprintLabelFor(f.imprint),
+          startPoints, startLayer: b?.layer ?? 1, startLayerPoints: b?.layerPoints ?? 0,
+          pointsPerLayer: b?.pointsPerLayer ?? TECHNIQUE_MASTERY.pointsPerLayer,
+          totalLayers: b?.totalLayers ?? null,
+          gainBonusPct: f.gainBonusPct,
+        };
+      }),
+      freeTechniqueId: state.reincarnation.freeTechniqueId ?? "",
+      noRootNext,
       keptCost: state.reincarnation.keepsakes.reduce((sum, k) => sum + (state.reincarnation?.keepsakeCandidates.find((x) => x.kind === k.kind && x.id === k.id)?.cost ?? 0), 0),
       chosenOrigin: state.reincarnation.chosenOrigin,
       memoryKept: state.reincarnation.memoryKept,
@@ -516,6 +698,8 @@ export function toResponse(state: GameState): StateResponse {
         id: l.id, name: l.name, locked,
         lockReason: locked ? `需${realmsFor(state.settings)[gate]?.name ?? ""}境${l.id === "realm" ? "（仅第一世）" : ""}` : "",
         decayPct: Math.round(decayMult(counts[l.group] ?? 0) * 100),
+        // U-399：事件密度定性词（由配置表 density 分档派生，地图卡小字展示）。
+        densityWord: exploreDensityWord(l.id),
       };
     }),
     mainline: {
@@ -720,6 +904,43 @@ export function toResponse(state: GameState): StateResponse {
         revisitText: signInRevisitText(s),
       })),
     },
+    // U-086 知识图鉴整形：存档图鉴（键 = 功法 id）与功法配置表
+    // 按配置顺序对齐成条目——只下发真实收录过的功法，未学过的
+    // 不出现；current 标记本世正在修习的那一门。U-614：印记强
+    // 度与换算待遇逐条现算下发，图鉴页与服务端结算同源。
+    knowledgeCodex: (() => {
+      const codex = state.knowledgeCodex ?? {};
+      const entries = TECHNIQUES
+        .filter((t) => t.id in codex)
+        .map((t) => {
+          // U-614：印记强度与按当前 t 换算的重学待遇逐条下发（未
+          // 精通过的条目无印记、按满值口径，见 codexImprintOf）。
+          // U-626：条目带品阶，重学起点按该功法总点数换算成层数
+          // 下发；条目按品阶由高到低排序（同品阶保持配置顺序）。
+          const imprint = codexImprintOf(codex[t.id]);
+          const values = imprintValuesFor(imprint, t);
+          const b = techLayerBreakdown(t, values.startPoints);
+          return {
+            id: t.id, name: t.name, desc: t.desc, bonusPct: t.bonusPct, grade: t.grade, kind: t.kind,
+            mastered: !!codex[t.id]?.mastered,
+            current: !!c && c.techniqueId === t.id,
+            imprint, imprintLabel: imprintLabelFor(imprint),
+            relearnStartPoints: values.startPoints, relearnStartLayer: b.layer, relearnStartLayerPoints: b.layerPoints,
+            pointsPerLayer: b.pointsPerLayer, totalLayers: b.totalLayers,
+            relearnGainBonusPct: values.gainBonusPct,
+          };
+        })
+        .sort((a, b) => techGradeRank(b.grade) - techGradeRank(a.grade));
+      return {
+        count: entries.length,
+        masteredCount: entries.filter((e) => e.mastered).length,
+        imprintFullStartPct: TECHNIQUE_MASTERY.imprintFullStartPct,
+        imprintFullGainPct: TECHNIQUE_MASTERY.imprintFullGainPct,
+        imprintFloorGainPct: TECHNIQUE_MASTERY.imprintFloorGainPct,
+        imprintDecayDivisor: TECHNIQUE_MASTERY.imprintDecayDivisor,
+        entries,
+      };
+    })(),
     // U-393 封印之蛋整形：配置表全部蛋 → 埋藏地点名/是否已拾（跨
     // 世收集清单）/是否正在此地；nextClueIn 是距下一条线索还差的
     // 枚数（蛋已拾尽时为 0）；clues 只下发被指地点与线索文案；
@@ -817,6 +1038,24 @@ export function toResponse(state: GameState): StateResponse {
         locationName: l.name,
         months: travelMonthsTo(l.id),
       })),
+    },
+    // U-401 秘境整形：配置表三界逐界下发，槽位状态取角色本世记
+    // 录（无角色时全为未领/未触发）；丹药名现查商店表，与服务端
+    // 发放同一份配置。
+    secretRealms: {
+      slotChancePct: SECRET_REALMS.slotChancePct,
+      bossChancePct: SECRET_REALMS.bossChancePct,
+      realms: SECRET_REALMS.realms.map((r) => {
+        const st = c?.secretRealms?.[r.locationId];
+        return {
+          locationId: r.locationId,
+          locationName: locById(r.locationId)?.name ?? r.locationId,
+          atLocation: !!c && c.locationId === r.locationId,
+          pillName: SHOP[r.pillId].name, pillCount: r.pillCount, pillClaimed: !!st?.pillClaimed,
+          techGrade: r.techGrade, techClaimed: !!st?.techClaimed,
+          bossName: r.boss.name, bossIntro: r.boss.intro, bossReady: !!st?.bossReady, bossDefeated: !!st?.bossDefeated,
+        };
+      }),
     },
   };
 }

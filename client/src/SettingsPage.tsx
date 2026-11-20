@@ -9,6 +9,8 @@
 // 本页存档栏（三级确认，见 settings.game.resetTripleConfirm）。
 
 import { useRef, useState } from "react";
+import { actionFields } from "./fields";
+import type { Actions } from "../../server/src/actions";
 import { api } from "./api";
 import type { State } from "./types";
 import { Seal, ThemeIcon } from "./widgets";
@@ -17,6 +19,11 @@ import {
 DEFAULT_SYSTEM_PROMPT, buildSaveSummary, callLocalAi, exportSettingsJson, importSettingsJson, resolveTheme, useSystemDark,
 type AppSettings, type SummaryDetail, type ThinkingLevel,
 } from "./settings";
+
+// AI 连接三项输入（Key / 模型名 / 接口地址）的长度限制直接取自
+// aiTestConnection 动作的请求 schema，与服务端校验同源、不再手写
+// （平台 v29 口径）；这些值仍只存本机设置，限制只是提交口径对齐。
+const FIELDS = actionFields<typeof Actions>();
 
 type Section = "ai" | "game" | "save" | "about";
 const SECTIONS: { id: Section; icon: string; label: string }[] = [
@@ -99,7 +106,7 @@ function SwitchRow({ title, desc, checked, onToggle }: { title: string; desc: st
   );
 }
 
-export function SettingsPage({ settings, onChange, state, onExportSave, onImportSave, onResetAll, resetting }: {
+export function SettingsPage({ settings, onChange, state, onExportSave, onImportSave, onResetAll, resetting, resetFailed, onClearResetError }: {
   settings: AppSettings;
   onChange: (next: AppSettings) => void;
   state: State | null;
@@ -107,6 +114,11 @@ export function SettingsPage({ settings, onChange, state, onExportSave, onImport
   onImportSave: (json: string) => Promise<void>;
   onResetAll: () => void;
   resetting: boolean;
+  // 上一次散功调用失败（重试耗尽后）：确认处明示、原地可重试。
+  // 与主菜单同一口径（2026-11-20 修复）：确认弹窗成功前不关、
+  // 失败不清空已输入的「不后悔」，避免失败被静默吞掉。
+  resetFailed: boolean;
+  onClearResetError: () => void;
 }) {
   const [section, setSection] = useState<Section>("ai");
   // 主题实际生效值：跟随系统时随系统深浅色实时变，设置里明示当前是哪一档。
@@ -254,7 +266,7 @@ export function SettingsPage({ settings, onChange, state, onExportSave, onImport
                   <div className="mt-4">
                     <label htmlFor="ai-key" className="mb-1.5 block text-xs font-bold text-[var(--dim)]">API Key（只存这台设备的浏览器本地，不进存档、不进仓库）</label>
                     <div className="flex gap-1.5">
-                      <input id="ai-key" type={showKey ? "text" : "password"} value={ai.apiKey} onChange={(e) => setAi({ apiKey: e.target.value })}
+                      <input id="ai-key" {...FIELDS.aiTestConnection.apiKey} type={showKey ? "text" : "password"} value={ai.apiKey} onChange={(e) => setAi({ apiKey: e.target.value })}
                         placeholder={provider.keyHint || "粘贴你的 API Key"} autoComplete="off"
                         className={`${FIELD} min-w-0 flex-1`} />
                       <button type="button" onClick={() => setShowKey(!showKey)} aria-label={showKey ? "隐藏 API Key" : "显示 API Key"}
@@ -270,7 +282,7 @@ export function SettingsPage({ settings, onChange, state, onExportSave, onImport
 
                 <div className="mt-4">
                   <label htmlFor="ai-base" className="mb-1.5 block text-xs font-bold text-[var(--dim)]">接口地址（Base URL）{provider.id === "custom" || provider.id === "localcustom" ? " · 必填" : " · 预设可改（如走代理/中转）"}</label>
-                  <input id="ai-base" type="text" value={ai.baseUrl} onChange={(e) => setAi({ baseUrl: e.target.value })}
+                  <input id="ai-base" {...FIELDS.aiTestConnection.baseUrl} type="text" value={ai.baseUrl} onChange={(e) => setAi({ baseUrl: e.target.value })}
                     placeholder={isLocal ? "http://localhost:11434/v1" : "https://…/v1"} autoComplete="off"
                     className={FIELD} />
                   {provider.baseUrl && ai.baseUrl !== provider.baseUrl && (
@@ -287,7 +299,7 @@ export function SettingsPage({ settings, onChange, state, onExportSave, onImport
                   )}
                   <div>
                     <label htmlFor="ai-model" className="mb-1.5 block text-xs font-bold text-[var(--dim)]">模型名{isLocal ? "（必填：填本机已加载/拉取的模型名）" : "（可从上方预设选，也可直接改名）"}</label>
-                    <input id="ai-model" type="text" value={ai.model} onChange={(e) => setAi({ model: e.target.value })}
+                    <input id="ai-model" {...FIELDS.aiTestConnection.model} type="text" value={ai.model} onChange={(e) => setAi({ model: e.target.value })}
                       placeholder={isLocal ? "如 qwen3:8b" : provider.defaultModel} autoComplete="off"
                       className={FIELD} />
                   </div>
@@ -419,12 +431,17 @@ export function SettingsPage({ settings, onChange, state, onExportSave, onImport
                       <span className="text-xs font-bold text-[var(--red)]">散功重开会清空角色、前世与编年史（报错记录保留），确定？</span>
                       <button type="button" disabled={resetting} onClick={() => {
                         if (settings.game.resetTripleConfirm) { setResetPhrase(""); setResetStage(2); }
-                        else { onResetAll(); setResetStage(0); }
-                      }} className="rounded-full bg-[var(--red)] px-3 py-2 text-xs font-bold text-[var(--on-bright)] disabled:opacity-40">确认散功</button>
-                      <button type="button" onClick={() => setResetStage(0)} className="rounded-full bg-[var(--surface2)] px-3 py-2 text-xs">取消</button>
+                        // 关掉三级确认时直接执行：确认行保持打开直到
+                        // 成功（App 跳回主菜单）或失败（行内明示重试）。
+                        else onResetAll();
+                      }} className="rounded-full bg-[var(--red)] px-3 py-2 text-xs font-bold text-[var(--on-bright)] disabled:opacity-40">{resetting && !settings.game.resetTripleConfirm ? "散功中…" : "确认散功"}</button>
+                      <button type="button" disabled={resetting} onClick={() => { setResetStage(0); onClearResetError(); }} className="rounded-full bg-[var(--surface2)] px-3 py-2 text-xs disabled:opacity-40">取消</button>
+                      {resetFailed && !settings.game.resetTripleConfirm && (
+                        <span className="w-full text-xs font-bold text-[var(--red)]" role="alert">散功没成功，存档还没有清空——多半是网络抖动。再点一次「确认散功」重试。</span>
+                      )}
                     </span>
                   ) : (
-                    <button type="button" onClick={() => setResetStage(1)} className="rounded-full bg-[var(--surface2)] px-4 py-2 text-xs font-bold text-[var(--red)]">散功重开（清空存档）</button>
+                    <button type="button" onClick={() => { onClearResetError(); setResetStage(1); }} className="rounded-full bg-[var(--surface2)] px-4 py-2 text-xs font-bold text-[var(--red)]">散功重开（清空存档）</button>
                   )}
                 </div>
               </div>
@@ -496,13 +513,16 @@ export function SettingsPage({ settings, onChange, state, onExportSave, onImport
             <p className="mt-2 text-sm leading-relaxed">散功重开会清空角色、全部前世与编年史（报错记录保留），且<b>无法撤销</b>。真要散功，在下方输入「不后悔」三个字，再点确认。</p>
             <label htmlFor="reset-phrase" className="mb-1.5 mt-4 block text-xs font-bold text-[var(--dim)]">输入「不后悔」以解锁确认</label>
             <input id="reset-phrase" type="text" value={resetPhrase} onChange={(e) => setResetPhrase(e.target.value)}
-              placeholder="不后悔" autoComplete="off" autoFocus
+              placeholder="不后悔" autoComplete="off" autoFocus disabled={resetting}
               className={FIELD} />
+            {resetFailed && (
+              <p className="mt-3 text-sm font-bold text-[var(--red)]" role="alert">散功没成功，存档还没有清空——多半是刚才网络抖动。输入不用重打，直接再点「确认散功」重试。</p>
+            )}
             <div className="mt-4 flex gap-2">
               <button type="button" disabled={resetting || resetPhrase.trim() !== "不后悔"}
-                onClick={() => { onResetAll(); setResetStage(0); setResetPhrase(""); }}
-                className="flex-1 rounded-full bg-[var(--red)] px-4 py-2.5 text-sm font-bold text-[var(--on-bright)] disabled:opacity-40">确认散功</button>
-              <button type="button" onClick={() => { setResetStage(0); setResetPhrase(""); }} className="flex-1 rounded-full bg-[var(--surface2)] px-4 py-2.5 text-sm font-bold">取消</button>
+                onClick={() => onResetAll()}
+                className="flex-1 rounded-full bg-[var(--red)] px-4 py-2.5 text-sm font-bold text-[var(--on-bright)] disabled:opacity-40">{resetting ? "散功中…" : "确认散功"}</button>
+              <button type="button" disabled={resetting} onClick={() => { setResetStage(0); setResetPhrase(""); onClearResetError(); }} className="flex-1 rounded-full bg-[var(--surface2)] px-4 py-2.5 text-sm font-bold disabled:opacity-40">取消</button>
             </div>
           </div>
         </div>

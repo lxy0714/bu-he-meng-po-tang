@@ -11,8 +11,9 @@ NPCS, SHOP, caveUpgradeCost, enemyById, shopPrice
 } from "./data";
 import {
 addRelation, advanceActionMonths, activeArtifactFx, applyEffects, checkDeath, decayMult, loadState,
-pushLog, resolveFight, rngForNext, rollCheck, saveState, weekKeyOf, type GameState,
+notePendingEventBlock, pushLog, resolveFight, rngForNext, rollCheck, saveState, weekKeyOf, type GameState,
 } from "./state";
+import { formatEffectGains, type Effect } from "./events";
 import { stateResponse, toResponse, type StateResponse } from "./respond";
 import { bellFloat, uniformTable, weighted } from "./rng";
 import { DUEL_CHECK, SKILL_CHECKS, duelDcFor, socialDcFor } from "./checks";
@@ -37,7 +38,8 @@ export const worldActions = {
     async handler(ctx, args): Promise<StateResponse> {
       const state = await loadState(ctx);
       const c = state.character;
-      if (!c || c.dead || c.pendingEvent) return toResponse(state);
+      if (!c || c.dead) return toResponse(state);
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
       const enemy = enemyById(args.enemyId);
       if (!enemy) {
         hint(state, c.lifeNo, "斗法无从下手：没有这名敌手。");
@@ -66,7 +68,8 @@ export const worldActions = {
     async handler(ctx, args): Promise<StateResponse> {
       const state = await loadState(ctx);
       const c = state.character;
-      if (!c || c.dead || c.pendingEvent) return toResponse(state);
+      if (!c || c.dead) return toResponse(state);
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
       const wk = weekKeyOf(new Date());
       if (c.weekKey !== wk) { c.weekKey = wk; c.groupCounts = {}; }
       // U-617：聚财/丹道类法宝（聚宝盆/药王鼎）在本 handler 内统一
@@ -182,7 +185,8 @@ export const worldActions = {
     async handler(ctx, args): Promise<StateResponse> {
       const state = await loadState(ctx);
       const c = state.character;
-      if (!c || c.dead || c.pendingEvent) return toResponse(state);
+      if (!c || c.dead) return toResponse(state);
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
       const wk = weekKeyOf(new Date());
       if (c.weekKey !== wk) { c.weekKey = wk; c.groupCounts = {}; }
       // U-617：社交类法宝（同心结）——情谊与仇怨的增减幅度按配置
@@ -238,9 +242,19 @@ export const worldActions = {
         // 取值集中在均值附近；整数取整）。
         const gain = bondGain(Math.round(bellFloat(visitRng, 4, 9)));
         rel.bond += gain; clampBond();
+        // 2026-11-18 自测修复：拜访的额外收益（论道修为 / 业力 /
+        // 道侣贴补灵石）此前只落账不记日志，玩家对不上账——结算
+        // 前后实测差值（经天赋修正后的实际到手数）一并写进日志，
+        // 与其他社交动作的记账口径一致。掷骰与结算顺序不变。
+        const before = { cult: c.cultivation, karma: c.karma, stones: c.stones };
         applyEffects(state, { cult: 8 + visitRng.int(0, 10), karma: 1 });
         if (rel.kind === "partner") applyEffects(state, { stones: visitRng.int(0, 15) });
-        pushLog(state, c.lifeNo, "social", `登门拜访${rel.name}，叙谈半日，情谊 +${gain}（${rel.bond}）。`);
+        const gains: Effect = {};
+        if (c.cultivation !== before.cult) gains.cult = c.cultivation - before.cult;
+        if (c.karma !== before.karma) gains.karma = c.karma - before.karma;
+        if (c.stones !== before.stones) gains.stones = c.stones - before.stones;
+        const gainText = formatEffectGains(gains);
+        pushLog(state, c.lifeNo, "social", `登门拜访${rel.name}，叙谈半日，情谊 +${gain}（${rel.bond}）。${gainText ? `席间另有所获：${gainText}。` : ""}`);
         advanceActionMonths(state, "social"); // U-608：社交耗时按细时钟配置表（social，配置表定 3 月）
       }
 

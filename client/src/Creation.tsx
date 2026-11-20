@@ -1,6 +1,8 @@
 // 创建视图：第一世降生。
 
 import { useEffect, useRef, useState } from "react";
+import { actionFields } from "./fields";
+import type { Actions } from "../../server/src/actions";
 import type { DrawField, PointsAttr, State } from "./types";
 import { TREE, optionLabel } from "./tree-data";
 import { KEEPSAKE_ARTIFACTS, villageImg } from "./display-data";
@@ -9,6 +11,10 @@ import { Seal } from "./widgets";
 import { PointsAllocator } from "./PointsAllocator";
 
 // ---------- creation view ----------
+
+// 输入框的限制（长度等）直接取自服务端动作的请求 schema，与服务端
+// 校验同源、不再手写（平台 v29 口径）。
+const FIELDS = actionFields<typeof Actions>();
 
 // 游戏规则 Q2 在这一页的实际效果（与服务端 createCharacter 的结算一一对应），
 // 明写出来，改 Q2 时一眼能看出这一页变了什么。
@@ -74,7 +80,7 @@ export function Creation({ state, onCreate, creating, onDraw, drawing, onChoice,
           <div className="rounded-[var(--radius)] bg-[var(--surface)] p-4">
             <label htmlFor="char-name" className="text-sm font-bold">姓名 / 道号</label>
             <div className="mt-2 flex gap-2">
-              <input id="char-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={12}
+              <input id="char-name" {...FIELDS.createCharacter.name} value={name} onChange={(e) => setName(e.target.value)}
                 placeholder="例如：沈长生" className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-base outline-none focus:border-[var(--accent)]" />
               <button type="button" disabled={creating} onClick={rollName} aria-label="随机掷一个姓名填入"
                 className="shrink-0 rounded-lg bg-[var(--surface2)] px-4 py-2.5 text-sm font-bold disabled:opacity-40">随机</button>

@@ -1,6 +1,8 @@
 // 轮回结算面板：评级、传承点赎回、下一世降生抽选。
 
 import { useEffect, useRef, useState } from "react";
+import { actionFields } from "./fields";
+import type { Actions } from "../../server/src/actions";
 import type { Character, DrawField, PointsAttr, State } from "./types";
 import { KEEPSAKE_ARTIFACTS, LOCATIONS, TREASURE_OPTIONS, tribulationImg } from "./display-data";
 import { Seal, ageTextOf } from "./widgets";
@@ -8,6 +10,10 @@ import { BirthDrawPanel } from "./BirthDrawPanel";
 import { PointsAllocator } from "./PointsAllocator";
 
 // ---------- reincarnation settlement ----------
+
+// 输入框的限制（长度等）直接取自服务端动作的请求 schema，与服务端
+// 校验同源、不再手写（平台 v29 口径）。
+const FIELDS = actionFields<typeof Actions>();
 
 // 与服务端 buildReincarnation 的判定优先级保持一致：Q3 极端规则 >
 // Q7 显式改选的按境界判定 > Q12 定稿公式。
@@ -34,7 +40,7 @@ export function memoryPreview(c: Character, q3: string, q7: string): string {
   return `横死——保留率 ${pct(0)}%${tail}`;
 }
 
-export function ReincarnationPanel({ state, busy, prepareFailed, onPrepare, onAllocatePoints, onResetDraw, onBuyBoon, onKeepsake, onConfirm, onDraw, drawing, onChoice, onTalents }: {
+export function ReincarnationPanel({ state, busy, prepareFailed, onPrepare, onAllocatePoints, onResetDraw, onBuyBoon, onKeepsake, onSelectFreeTechnique, onConfirm, onDraw, drawing, onChoice, onTalents }: {
   state: State;
   busy: boolean;
   prepareFailed: boolean;
@@ -43,6 +49,7 @@ export function ReincarnationPanel({ state, busy, prepareFailed, onPrepare, onAl
   onResetDraw: () => void;
   onBuyBoon: (boonId: string) => void;
   onKeepsake: (kind: "artifact" | "technique" | "treasure", id: string, locationId?: string) => void;
+  onSelectFreeTechnique: (id: string) => void;
   onConfirm: (name: string) => void;
   onDraw: () => void;
   drawing: boolean;
@@ -111,6 +118,51 @@ export function ReincarnationPanel({ state, busy, prepareFailed, onPrepare, onAl
           {re.artifactShattered && (
             <p className="rounded-xl border-2 border-[var(--red)] bg-[var(--surface)] p-3 text-sm font-bold text-[var(--red)]">走火入魔 · 魂飞魄散：本命法宝已碎裂——下方「本命法宝」类不可赎回；功法与遗藏不受影响。</p>
           )}
+          {/* U-627：下一世灵根为无灵根时，引气类功法已不在赎回/免费带走候选里（服务端过滤），此处明示口径 */}
+          {re.noRootNext && (
+            <p className="rounded-xl border-2 border-[var(--gold)] bg-[var(--surface)] p-3 text-sm font-bold">无灵根，无法引气：下一世天生无灵根、感应不到灵气——引气类（法修）功法不可带走，已不在下方候选里；只能带走体修类功法。若一门体修功法都没带走，下一世将自带凡阶体修《凡骨锻体篇》起步、改走炼体。在下方降生抽选里换掉无灵根，候选即恢复。</p>
+          )}
+
+          {/* U-614 图鉴免费带走：图鉴里曾精通的功法凭精通印记带走
+              一门，不花传承点；图鉴无曾精通时整区不显示（与法宝挑
+              选区同口径）。待遇按结算时印记强度换算：印记越深，下
+              一世开局层数起点与增长加成越高。已选的那一门会从
+              下方赎回候选里消失（服务端下发时过滤）。U-626：候选
+              卡带品阶标识，开局起点按层数呈现。 */}
+          {re.freeTechniqueCandidates.length > 0 && (
+            <fieldset>
+              <legend className="text-sm font-bold">图鉴免费带走 · 精通印记（不花传承点，限一门）</legend>
+              <p className="mt-1 text-xs leading-relaxed text-[var(--dim)]">
+                知识图鉴里曾臻精通的功法，凭精通印记可直接带走一门：下一世开局即会、成为修习中功法，按印记深浅起步重学（开局层数与增长加成见各卡）。印记会随世变淡：哪一世没再精通它，它就淡一些，练得越接近修满淡得越少；淡到底也只余下限微光、永不消失。已免费带走的那一门不再出现在下方赎回候选里，传承点账目不受影响。
+              </p>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {re.freeTechniqueCandidates.map((f) => {
+                  const chosen = re.freeTechniqueId === f.id;
+                  const segs = Math.round(f.imprint / 20);
+                  const startText = `第 ${f.startLayer} 层（本层 ${f.startLayerPoints}/${f.pointsPerLayer} 点）`;
+                  return (
+                    <button key={f.id} type="button" disabled={busy}
+                      aria-pressed={chosen}
+                      aria-label={`${chosen ? "取消免费带走" : "免费带走"}${f.name}，${f.grade}阶功法，精通印记${f.imprintLabel}，下一世开局${startText}、增长 +${f.gainBonusPct}%`}
+                      onClick={() => onSelectFreeTechnique(f.id)}
+                      className={`rounded-xl border-2 p-2.5 text-center disabled:opacity-40 ${chosen ? "border-[var(--gold)] bg-[var(--gold-soft)]" : "border-[var(--border)]"}`}>
+                      <span className="glyph-tile text-2xl" aria-hidden>法</span>
+                      <span className="mt-1 block font-song text-sm font-bold">{f.name}</span>
+                      <span className="mt-0.5 inline-block rounded bg-[var(--ink)] px-1.5 py-0.5 text-[11px] font-bold text-[var(--on-ink)]">{f.grade}阶</span>
+                      <span className="mt-0.5 block text-[11px] leading-snug text-[var(--dim)]">{f.desc}</span>
+                      <span className="mt-1.5 flex items-center justify-center gap-0.5" aria-hidden>
+                        {[0, 1, 2, 3, 4].map((i) => (
+                          <span key={i} className={`h-1.5 w-4 rounded-full ${i < segs ? "bg-[var(--seal)]" : "bg-[var(--border)]"}`} />
+                        ))}
+                      </span>
+                      <span className="mt-1 block text-[11px] font-bold text-[var(--seal)]">{f.imprintLabel} · 印记 {Number.isInteger(f.imprint) ? f.imprint : f.imprint.toFixed(1)}/100</span>
+                      <span className="mt-0.5 block text-[11px] font-bold text-[var(--gold)]">{chosen ? `✓ 免费带走 · 开局${startText} · 增长 +${f.gainBonusPct}%` : `免费 · 开局${startText} · 增长 +${f.gainBonusPct}%`}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+          )}
 
           {/* 传承点赎回：法宝 / 功法 / 遗藏 */}
           <fieldset>
@@ -119,12 +171,14 @@ export function ReincarnationPanel({ state, busy, prepareFailed, onPrepare, onAl
               {(["artifact", "technique", "treasure"] as const).map((kind) => {
                 const cands = re.keepsakeCandidates.filter((k) => k.kind === kind);
                 // U-618：本命法宝候选只含本世实际持有的那一件；本世一
-                // 件法宝都没有时，本命法宝挑选区整个不显示。
-                if (kind === "artifact" && cands.length === 0) return null;
+                // 件法宝都没有时，本命法宝挑选区整个不显示。功法同
+                // 口径（2026-11-18 自测修复）：只含本世实际学过的那
+                // 门，未学功法时功法挑选区整个不显示。
+                if ((kind === "artifact" || kind === "technique") && cands.length === 0) return null;
                 const lockedCand = kind === "artifact" ? cands.find((k) => k.locked) : undefined;
                 return (
                 <div key={kind}>
-                  <p className="mb-1.5 text-xs font-bold text-[var(--dim)]">{kind === "artifact" ? "本命法宝（本世所得）" : kind === "technique" ? "功法" : "前世遗藏（选地点埋下，后世探索取回）"}</p>
+                  <p className="mb-1.5 text-xs font-bold text-[var(--dim)]">{kind === "artifact" ? "本命法宝（本世所得）" : kind === "technique" ? "功法（本世所学）" : "前世遗藏（选地点埋下，后世探索取回）"}</p>
                   <div className="grid grid-cols-3 gap-2">
                     {cands.map((k) => {
                       const kept = re.keepsakes.some((x) => x.kind === k.kind && x.id === k.id);
@@ -143,6 +197,7 @@ export function ReincarnationPanel({ state, busy, prepareFailed, onPrepare, onAl
                           className={`rounded-xl border-2 p-2.5 text-center disabled:opacity-40 ${kept ? "border-[var(--gold)] bg-[var(--gold-soft)]" : "border-[var(--border)]"}`}>
                           <span className="glyph-tile text-2xl" aria-hidden>{kind === "artifact" ? (KEEPSAKE_ARTIFACTS.find((a) => a.id === k.id)?.icon ?? "剑") : kind === "technique" ? "法" : (TREASURE_OPTIONS.find((t) => t.id === k.id)?.icon ?? "匣")}</span>
                           <span className="mt-1 block font-song text-sm font-bold">{k.name}</span>
+                          {kind === "technique" && k.grade && <span className="mt-0.5 inline-block rounded bg-[var(--ink)] px-1.5 py-0.5 text-[11px] font-bold text-[var(--on-ink)]">{k.grade}阶</span>}
                           <span className="mt-0.5 block text-[11px] leading-snug text-[var(--dim)]">{k.desc}</span>
                           <span className="mt-1 block text-[11px] font-bold text-[var(--gold)]">{shatteredBlocked ? "已碎裂" : lockedBlocked ? `需${k.minRealmName ?? ""}境认主 · 本世未达` : kept ? `✓ 已保留${keptLoc ? ` · 埋于${LOCATIONS.find((l) => l.id === keptLoc)?.name ?? ""}` : ""}` : `传承点 ${k.cost}${kind === "artifact" && k.minRealmName ? ` · 需${k.minRealmName}境` : ""}`}</span>
                         </button>
@@ -191,7 +246,7 @@ export function ReincarnationPanel({ state, busy, prepareFailed, onPrepare, onAl
           <div>
             <label htmlFor="next-life-name" className="text-sm font-bold">下一世姓名</label>
             <div className="mt-1.5 flex gap-2">
-              <input id="next-life-name" value={nextName} onChange={(e) => setNextName(e.target.value)} maxLength={12}
+              <input id="next-life-name" {...FIELDS.reincarnate.name} value={nextName} onChange={(e) => setNextName(e.target.value)}
                 placeholder="给下一世起个名字" className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-base outline-none focus:border-[var(--accent)]" />
               <button type="button" disabled={busy} aria-label="随机掷一个姓名填入"
                 onClick={() => setNextName(state.pools.names[Math.floor(Math.random() * state.pools.names.length)] ?? "")}

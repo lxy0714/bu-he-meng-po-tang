@@ -3,10 +3,10 @@
 // 从 actions.ts 原样拆分，记忆保留公式未动。
 
 import {
-ARTIFACTS, CLASSIC_REALMS, TECHNIQUES, TREASURES, TALENTS, ORIGIN_POOL, DESTINIES, ROOTS,
-destinyById, reincarnationPointsForGrade, reincarnationPointsForShards, type TalentDef,
+ARTIFACTS, CLASSIC_REALMS, TECHNIQUES, TECHNIQUE_MASTERY, TREASURES, TALENTS, ORIGIN_POOL, DESTINIES, ROOTS,
+destinyById, imprintValuesFor, reincarnationPointsForGrade, reincarnationPointsForShards, techLayerBreakdown, techLayerText, type TalentDef,
 } from "./data";
-import { lifeGrade, realmText, realmsFor, rngForNext, type BirthChoice, type BirthDraw, type Character, type GameState, type MemoryFragment, type PendingKeepsake, type Reincarnation } from "./state";
+import { codexImprintOf, imprintTextFor, lifeGrade, pushLog, realmText, realmsFor, rngForNext, techProgressOf, type BirthChoice, type BirthDraw, type Character, type FreeTechniqueCandidate, type GameState, type MemoryFragment, type PendingKeepsake, type Reincarnation } from "./state";
 import { randomSet, uniformTable, weighted, type SeededRng } from "./rng";
 import { MEMORY_CHECK, memoryChanceFor, realmMemoryChanceFor } from "./checks";
 
@@ -102,9 +102,15 @@ export function makeBirthDraw(rng: SeededRng, excludeTalentIds: string[] = []): 
     chosenTalents: [],
   };
 }
-// 结算一项抽选：random 时从候选池里现抽一个，否则用自选值。
-// U-575：候选池统一走权重表抽取，候选无权重字段按 commonality: 1 等权。
+// 结算一项抽选：展示即结果——value 就是面板上展示的当前值（自选
+// 值，或点「随机」时已当场掷定的值，见 setBirthChoice），降生按
+// 它落定，不在创建时另掷一次（2026-11-18 自测修复：此前 random
+// 在创建时重掷，面板/状态里摆着的具体值与最终落到角色身上的结
+// 果对不上）。value 不在候选池里（旧存档异常）时才回退：自选按
+// value、随机按池内掷定。
+// U-575：回退掷定同走权重表抽取，候选无权重字段按 commonality: 1 等权。
 export function resolveChoice(choice: BirthChoice, rng: SeededRng): string {
+  if (choice.value && choice.pool.includes(choice.value)) return choice.value;
   if (!choice.random && choice.value) return choice.value;
   return weighted(rng, uniformTable(choice.pool.length > 0 ? choice.pool : [choice.value]));
 }
@@ -133,7 +139,85 @@ export function rollRatedTalents(rng: SeededRng, grade: string, excludeTalentIds
   }).filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i);
 }
 
+// ---------- U-614 精通印记衰减（连续自适应版） ----------
+// 每次轮回结算生成时统一结算印记（本函数只在 buildReincarnation
+// 里调一次——结算对象生成后即复用、不会重复生成，故每世恰好结
+// 算一次；且在免费带走候选生成之前，候选待遇取结算后的 t）：
+// - 本世精通了该功法：t 回满 100（印记变深/回满）；
+// - 曾精通但本世未精通：t 减少 (100 − p) / 衰减除数（配置表
+//   imprintDecayDivisor = 2）。U-626：p 改为该功法本世进度占比
+//   ×100（已攒总点数 / 总点数 ×100，本世没学这门时 p = 0，一世
+//   全放掉 50；与 U-614 的 0–100 熟练度口径等比例）；练得越接
+//   近精通、淡得越少——自适应所在。t 不低于 0（下限即涨幅 +下
+//   限%、永不遗忘，「学会过」记录与曾精通标记都不动）；
+// - 未精通过的条目不带印记、不参与结算。
+// t 实际变化时各记一条编年史，写明变深/变淡与当前换算待遇。
+// 占比展示文本：整数原样、小数保留一位（总点数 120/160/200 下
+// 占比可为 x.5 等半数），避免日志出现浮点长尾。
+function ratioPctText(p: number): string {
+  return Number.isInteger(p) ? String(p) : p.toFixed(1);
+}
+export function settleMasteryImprints(state: GameState, dead: Character): void {
+  if (!state.knowledgeCodex) state.knowledgeCodex = {};
+  const divisor = TECHNIQUE_MASTERY.imprintDecayDivisor;
+  for (const tech of TECHNIQUES) {
+    const entry = state.knowledgeCodex[tech.id];
+    const progress = techProgressOf(dead, tech.id);
+    if (progress.mastered) {
+      if (!entry) {
+        // 兜底：本世精通当刻本应已同步图鉴（gainTechniqueProficiency），
+        // 极旧存档缺条目时在此补建为满印记。
+        state.knowledgeCodex[tech.id] = { mastered: true, imprint: 100 };
+        continue;
+      }
+      const before = codexImprintOf(entry);
+      entry.mastered = true;
+      entry.imprint = 100;
+      if (before < 100) {
+        const v = imprintValuesFor(100, tech);
+        pushLog(state, dead.lifeNo, "technique", `📖 知识图鉴：「${tech.name}」这一世再度臻至精通，精通印记变深、重回完满（强度 ${imprintTextFor(before)} → 100）——后世重学自${techLayerText(tech, v.startPoints)}起步、增长 +${v.gainBonusPct}%。`);
+      }
+      continue;
+    }
+    if (!entry?.mastered) continue;
+    const before = codexImprintOf(entry);
+    // U-626：p = 本世进度占比 ×100（层数口径：已攒总点数 / 总点
+    // 数）；无限层功法 ratio 恒 0（防护值，且其永不精通、不会有
+    // 曾精通条目走到这里）。
+    const p = techLayerBreakdown(tech, progress.points).ratio * 100;
+    const decay = (100 - p) / divisor;
+    const after = Math.max(0, before - decay);
+    entry.imprint = after;
+    if (after !== before) {
+      const v = imprintValuesFor(after, tech);
+      const layerNote = progress.points > 0 ? `练到${techLayerText(tech, progress.points)}（总进度 ${ratioPctText(p)}%）` : "整世未曾修习（总进度 0%）";
+      pushLog(state, dead.lifeNo, "technique", after <= 0
+        ? `📖 知识图鉴：「${tech.name}」这一世只${layerNote}，精通印记变淡到底（强度 ${imprintTextFor(before)} → 0）——只余下限微光：后世重学自${techLayerText(tech, v.startPoints)}起步、增长 +${v.gainBonusPct}%；印记到此为止、再过几世也不会消失。`
+        : `📖 知识图鉴：「${tech.name}」这一世${layerNote}、未至精通，精通印记变淡（强度 ${imprintTextFor(before)} → ${imprintTextFor(after)}）——后世重学自${techLayerText(tech, v.startPoints)}起步、增长 +${v.gainBonusPct}%；哪一世再将它练至精通，印记即回满。`);
+    }
+  }
+}
+
+// U-614：免费带走候选快照——印记结算之后按图鉴当前 t 生成：图
+// 鉴里曾精通的功法全列（本世刚精通的在精通当刻已入图鉴、天然
+// 在内），每门带结算后的 t 与按 t 换算的带走待遇。图鉴无曾精
+// 通时为空。
+export function freeTechniqueCandidatesOf(state: GameState): FreeTechniqueCandidate[] {
+  const codex = state.knowledgeCodex ?? {};
+  return TECHNIQUES
+    .filter((t) => !!codex[t.id]?.mastered)
+    .map((t) => {
+      const imprint = codexImprintOf(codex[t.id]);
+      return { id: t.id, name: t.name, desc: t.desc, imprint, ...imprintValuesFor(imprint, t) };
+    });
+}
+
 export function buildReincarnation(state: GameState, dead: Character): Reincarnation {
+  // U-614：结算生成第一步先结算精通印记（本世精通回满、其余按
+  // 本世最终熟练度衰减），随后再按结算后的图鉴生成免费带走候
+  // 选——候选待遇即衰减后的 t 换算待遇。
+  settleMasteryImprints(state, dead);
+  const freeTechniqueCandidates = freeTechniqueCandidatesOf(state);
   const grade = lifeGrade(dead);
   let legacyEarned = dead.realmIdx * 2 + dead.stageIdx + (grade === "S" ? 4 : grade === "A" ? 3 : grade === "B" ? 2 : 1);
   // U-002：轮回点在每次轮回结算时按本世评级档位发放（档位出自数值
@@ -176,7 +260,15 @@ export function buildReincarnation(state: GameState, dead: Character): Reincarna
     if (heldArtifact.fx.legacyBonus) legacyEarned += heldArtifact.fx.legacyBonus;
     if (heldArtifact.fx.pointsBonus) { pointsEarned += heldArtifact.fx.pointsBonus; state.reincarnationPoints += heldArtifact.fx.pointsBonus; }
   }
-  for (const t of TECHNIQUES) keepsakeCandidates.push({ kind: "technique", id: t.id, name: t.name, desc: t.desc, cost: t.legacyCost });
+  // 2026-11-18 自测修复：功法候选与法宝同一口径——只列本世实际
+  // 学过的功法（功法槽 techniqueId，本世至多一门）；没学过的功
+  // 法不再混进「保留」候选（此前按全功法池生成，玩家会疑惑没学
+  // 过的功法为什么能保留）。本世未学功法时候选里没有任何功法
+  // 条目，客户端据此整段不显示功法挑选区。selectKeepsake 服务端
+  // 同步拦截未学功法的点选。遗藏候选口径不变（那是花传承点买
+  // 下埋给后世，本就不是「保留本世所得」）。
+  const learnedTech = dead.techniqueId ? (TECHNIQUES.find((t) => t.id === dead.techniqueId) ?? null) : null;
+  if (learnedTech) keepsakeCandidates.push({ kind: "technique", id: learnedTech.id, name: learnedTech.name, desc: learnedTech.desc, cost: learnedTech.legacyCost, grade: learnedTech.grade });
   for (const t of TREASURES) keepsakeCandidates.push({ kind: "treasure", id: t.id, name: t.name, desc: t.desc, cost: t.legacyCost });
   // 下一世降生抽选（Q13）：出身只定出身；天赋另从评级池三选一保留。
   state.birthDraw = makeBirthDraw(rngForNext(state, "birth-draw"), dead.talentIds);
@@ -191,8 +283,15 @@ export function buildReincarnation(state: GameState, dead: Character): Reincarna
       : state.settings.q7.value === "by_realm"
         ? realmMemoryOutcome(dead, rngForNext(state, "memory:by-realm"))
         : memoryOutcome(dead, rngForNext(state, "memory:q12"));
+  // 2026-11-18 自测修复：轮回点发放日志在此（结算生成当刻）记账
+  // ——余额是发放后、开局分配消费之前的数，账目自洽。此前这两条
+  // 记在 reincarnate（降生）时打印，余额已被结算期内的开局分配
+  // 扣掉，单看像点数凭空消失。数值与发放口径一字不变。
+  pushLog(state, dead.lifeNo, "birth", `🔄 轮回结算发放轮回点 +${pointsEarned}（按 ${grade} 级档位），轮回点余 ${state.reincarnationPoints}——只用于开局分配，与传承点不混用。`);
+  if (shardPointsEarned > 0) pushLog(state, dead.lifeNo, "birth", `🧩 主线轮回点：本世新集记忆碎片 ${shardsThisLife} 枚（前世之谜），按碎片档发放轮回点 +${shardPointsEarned}，已与评级发放同池入账（余 ${state.reincarnationPoints}）。`);
   return {
     grade, legacyEarned, pointsEarned, shardPointsEarned, shardsThisLife, keepsakeCandidates, keepsakes: [],
+    freeTechniqueCandidates, freeTechniqueId: null,
     chosenOrigin: null, memoryKept: outcome.kept, memoryNote: outcome.note,
     artifactShattered: shattered,
   };

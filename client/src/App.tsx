@@ -178,6 +178,7 @@ export function App() {
   const buyBoonM = useMutation({ mutationFn: (boonId: string) => api.buyBirthBoon({ boonId }), onSuccess: apply });
   const resetDrawM = useMutation({ mutationFn: () => api.resetDrawWithPoints({}), onSuccess: apply });
   const keepsakeM = useMutation({ mutationFn: (a: { kind: "artifact" | "technique" | "treasure"; id: string; locationId?: string }) => api.selectKeepsake(a), onSuccess: apply });
+  const freeTechM = useMutation({ mutationFn: (techniqueId: string) => api.selectFreeTechnique({ techniqueId }), onSuccess: apply });
   const reincM = useMutation({ mutationFn: (name: string) => api.reincarnate(name ? { name } : {}), onSuccess: apply });
   const fightM = useMutation({ mutationFn: (id: string) => api.fight({ enemyId: id }), onSuccess: apply });
   const economyM = useMutation({ mutationFn: (kind: EconomyKind) => api.economy({ kind }), onSuccess: apply });
@@ -186,7 +187,19 @@ export function App() {
   const buyOreM = useMutation({ mutationFn: (tier: number) => api.buyOre({ tier }), onSuccess: apply });
   const commissionM = useMutation({ mutationFn: (a: { kind: CommissionKind; commissionId: string }) => api.commission(a), onSuccess: apply });
   const timedM = useMutation({ mutationFn: (a: { kind: TimedEventKind; timedId: string }) => api.timedEvent(a), onSuccess: apply });
-  const resetM = useMutation({ mutationFn: () => api.resetAll({}), onSuccess: apply });
+  // 散功重开是幂等动作（重复执行结果相同），桥接失败时自动重试
+  // 3 次——2026-11-20 用户实测 bug：主菜单输完「不后悔」点确认，
+  // 那次调用失败、确认弹窗又抢先关闭，失败提示被全屏菜单盖住，
+  // 存档没清也无从重试，表现为「无法开新游戏」。除重试外，菜单/
+  // 设置页的确认弹窗改成成功前不关、失败在弹窗内明示可重试
+  //（见 MainMenu / SettingsPage 的 resetFailed 处理）；游戏动作的
+  // 不重试口径不变（那些动作重试会重复结算，散功不会）。
+  const resetM = useMutation({
+    mutationFn: () => api.resetAll({}),
+    onSuccess: apply,
+    retry: (failureCount, error) => (isBridgeFailure(error instanceof Error ? error.message : String(error)) ? failureCount < 3 : false),
+    retryDelay: (attempt) => Math.min(800 * 2 ** attempt, 6000),
+  });
   // 创建角色不做保存：尚无角色、无前世（第一世创建未完成）时离开
   // 创建 = 放弃这次降生——服务端作废残留的降生抽选并解锁规则，
   // 退出就当退出了。已有角色/前世的进行中存档不受影响。
@@ -221,7 +234,7 @@ export function App() {
     } catch { /* 失败走全局报错回传；已恢复的条目以服务端为准，下次读取对齐 */ }
     setRestoringAll(false);
   }, [queryClient, restoringAll]);
-  const busy = settingM.isPending || createM.isPending || actM.isPending || chooseM.isPending || routeM.isPending || abandonRouteM.isPending || travelM.isPending || reincM.isPending || prepareM.isPending || allocateM.isPending || buyBoonM.isPending || resetDrawM.isPending || keepsakeM.isPending || buryM.isPending || jadeM.isPending || choiceM.isPending || drawTalentsM.isPending || sectM.isPending || planM.isPending || runPlanM.isPending || clearPlanM.isPending || fightM.isPending || economyM.isPending || socialM.isPending || commissionM.isPending || timedM.isPending || forgeM.isPending || buyOreM.isPending;
+  const busy = settingM.isPending || createM.isPending || actM.isPending || chooseM.isPending || routeM.isPending || abandonRouteM.isPending || travelM.isPending || reincM.isPending || prepareM.isPending || allocateM.isPending || buyBoonM.isPending || resetDrawM.isPending || keepsakeM.isPending || buryM.isPending || jadeM.isPending || choiceM.isPending || drawTalentsM.isPending || sectM.isPending || planM.isPending || runPlanM.isPending || clearPlanM.isPending || fightM.isPending || economyM.isPending || socialM.isPending || commissionM.isPending || timedM.isPending || forgeM.isPending || buyOreM.isPending || freeTechM.isPending;
   const pendingKey: string | null =
     actM.isPending ? `act:${actM.variables}` :
     chooseM.isPending ? `choose:${chooseM.variables}` :
@@ -258,6 +271,7 @@ export function App() {
     onBuyBoon: (boonId: string) => buyBoonM.mutate(boonId),
     onResetDraw: () => resetDrawM.mutate(),
     onKeepsake: (kind: "artifact" | "technique" | "treasure", id: string, locationId?: string) => keepsakeM.mutate({ kind, id, locationId }),
+    onSelectFreeTechnique: (id: string) => freeTechM.mutate(id),
     onReincarnate: (name: string) => reincM.mutate(name),
     onDraw: onDrawStable, drawing: drawM.isPending, onChoice, onTalents,
     onSect: (kind: SectKind) => sectM.mutate(kind),
@@ -298,6 +312,32 @@ export function App() {
   // 底部导航切页后回到页首：从长页面中段切过去时不落在新页半腰。
   useEffect(() => { window.scrollTo({ top: 0 }); }, [view]);
 
+  // 主菜单题屏滚动锁定：题屏是整幅画的固定画面，显示期间锁住
+  // html/body 滚动与 overscroll（橡皮筋回弹也不许），离开菜单
+  // 即恢复原值——锁定只在菜单期间生效，其他页面滚动照常。题屏
+  // 本身另有 fixed 100dvh + overflow hidden 的容器（MainMenu）。
+  useEffect(() => {
+    if (view !== "menu") return;
+    const html = document.documentElement;
+    const body = document.body;
+    const prev = {
+      htmlOverflow: html.style.overflow,
+      bodyOverflow: body.style.overflow,
+      htmlOverscroll: html.style.overscrollBehavior,
+      bodyOverscroll: body.style.overscrollBehavior,
+    };
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    html.style.overscrollBehavior = "none";
+    body.style.overscrollBehavior = "none";
+    return () => {
+      html.style.overflow = prev.htmlOverflow;
+      body.style.overflow = prev.bodyOverflow;
+      html.style.overscrollBehavior = prev.htmlOverscroll;
+      body.style.overscrollBehavior = prev.bodyOverscroll;
+    };
+  }, [view]);
+
   const animClass = appSettings.game.animations ? "" : "no-anim";
 
   return (
@@ -313,7 +353,8 @@ export function App() {
         )}
 
         {state && view === "menu" && (
-          <MainMenu state={state} tripleConfirm={appSettings.game.resetTripleConfirm} resetting={resetM.isPending}
+          <MainMenu state={state} tripleConfirm={appSettings.game.resetTripleConfirm} resetting={resetM.isPending} resetFailed={resetM.isError}
+            onClearResetError={() => resetM.reset()}
             onContinue={() => { setEnteredGame(true); setView("game"); }}
             onNewGameDirect={() => { abandonIfUnfinishedCreation(); setView("setup"); }}
             onNewGameReset={() => resetM.mutate(undefined, { onSuccess: () => setView("setup") })}
@@ -347,7 +388,8 @@ export function App() {
           <SettingsPage settings={appSettings} onChange={updateSettings} state={state ?? null}
             onExportSave={async () => (await api.exportSave({})).json}
             onImportSave={async (json) => { apply(await api.importSave({ json })); }}
-            onResetAll={() => resetM.mutate(undefined, { onSuccess: () => { setEnteredGame(false); setView("menu"); } })} resetting={resetM.isPending} />
+            onResetAll={() => resetM.mutate(undefined, { onSuccess: () => { setEnteredGame(false); setView("menu"); } })} resetting={resetM.isPending} resetFailed={resetM.isError}
+            onClearResetError={() => resetM.reset()} />
         )}
 
         {/* U-624 退出游戏（游戏内入口）：各页顶部回主菜单。

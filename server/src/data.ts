@@ -5,18 +5,26 @@
 
 import { combatDcFor, CHECK_CONFIG } from "./checks";
 import {
-ARTIFACTS, ARTIFACT_SOURCES, CAVE_UPGRADE_BASE, CLASSIC_REALMS, COMMISSIONS, CRAFT_SKILLS, DAILY_COMMISSIONS, DAILY_EVENTS, DESTINIES, ENEMIES, EVENT_PACKS, EVENT_RELEASES, FORGE, LOCATION_DROPS, LOCATIONS,
+ARTIFACTS, ARTIFACT_SOURCES, CAVE_UPGRADE_BASE, CLASSIC_REALMS, COMMISSIONS, CRAFT_SKILLS, DAILY_COMMISSIONS, DAILY_EVENTS, DESTINIES, ENEMIES, EVENT_PACKS, EVENT_RELEASES, EXPLORE_TUNING, FORGE, LOCATION_DROPS, LOCATIONS,
 MAINLINE_CHAPTERS, MAINLINE_TOTAL_SHARDS, NAME_POOL, NPCS, ORIGIN_POOL, REINCARNATION_POINTS, ROOTS,
-SECT_RANKS, SEALED_EGGS, SHOP, SIGN_INS, TALENTS, TECHNIQUES, TIME_COSTS, TREASURES, TIMED_EVENTS,
+SECT_RANKS, SEALED_EGGS, SECRET_REALMS, SHOP, SIGN_INS, TALENTS, TECHNIQUES, TECHNIQUE_MASTERY, TIME_COSTS, TREASURES, TIMED_EVENTS,
 type ArtifactDef, type EnemyDef, type LocationDef, type MainlineChapter, type NpcDef, type RealmDef,
 type SectRankDef, type TalentDef, type TechDef, type TreasureDef,
 } from "./content";
 
 export {
-  ARTIFACTS, ARTIFACT_SOURCES, CAVE_UPGRADE_BASE, CLASSIC_REALMS, COMMISSIONS, CRAFT_SKILLS, DAILY_COMMISSIONS, DAILY_EVENTS, DESTINIES, ENEMIES, EVENT_PACKS, EVENT_RELEASES, FORGE, LOCATION_DROPS, LOCATIONS,
+  ARTIFACTS, ARTIFACT_SOURCES, CAVE_UPGRADE_BASE, CLASSIC_REALMS, COMMISSIONS, CRAFT_SKILLS, DAILY_COMMISSIONS, DAILY_EVENTS, DESTINIES, ENEMIES, EVENT_PACKS, EVENT_RELEASES, EXPLORE_TUNING, FORGE, LOCATION_DROPS, LOCATIONS,
   MAINLINE_CHAPTERS, MAINLINE_TOTAL_SHARDS, NAME_POOL, NPCS, ORIGIN_POOL, REINCARNATION_POINTS, ROOTS,
-  SECT_RANKS, SEALED_EGGS, SHOP, SIGN_INS, TALENTS, TECHNIQUES, TIME_COSTS, TREASURES, TIMED_EVENTS,
+  SECRET_REALMS, SECT_RANKS, SEALED_EGGS, SHOP, SIGN_INS, TALENTS, TECHNIQUES, TECHNIQUE_MASTERY, TIME_COSTS, TREASURES, TIMED_EVENTS,
 };
+export type { SecretRealmDef, SecretRealmBossDef, SecretRealmsDef } from "./content";
+export { secretRealmAt } from "./content";
+export type { ExploreTuningDef, ExploreTuningRowDef } from "./content";
+export { defaultHiddenSlots, exploreDensityWord, exploreTuningFor } from "./content";
+export type { TechniqueMasteryDef, TechniqueProfSource } from "./content";
+export { NO_ROOT_ID, NO_ROOT_STARTER_TECH_ID, clampImprint, imprintValuesFor, techGradeRank, techLayerBreakdown, techLayerText, techTotalPoints } from "./content";
+export type { TechKind } from "./content";
+export type { TechGrade, TechLayerBreakdown } from "./content";
 export type { ArtifactSourcesDef, ArtifactDropEntryDef, ArtifactSectGrantDef, ArtifactCommissionGrantDef } from "./content";
 export { commissionGrantFor, sectGrantForRank } from "./content";
 export type { ForgeDef, ForgeTierDef } from "./content";
@@ -28,7 +36,7 @@ export type { SealedEggsDef, SealedEggDef } from "./content";
 export type { EventPacksDef, EventPackDef } from "./content";
 export type { EventReleasesDef, EventReleaseBatchDef } from "./content";
 export type { LocationDropsDef, LocationDropDef, DropTier, DropTierDef } from "./content";
-export { CURRENT_EVENT_VERSION, birthBoonById, commissionById, craftLevelDefFor, craftNextLevelDef, craftProficiencyFor, craftYieldPctFor, dailyCommissionById, dropTierDef, eventPackOf, eventReleaseVersion, eventReleasedForDeck, eventUnlockedForLife, forgeCandidatesFor, forgeTierByTier, locationDropAt, reincarnationPointsForGrade, reincarnationPointsForShards, sealedEggAtLocation, signInByLocation, signInTierDef, techniqueDropTier, timeCostMonths, timedEventById, travelMonthsTo } from "./content";
+export { CURRENT_EVENT_VERSION, birthBoonById, commissionById, craftLevelDefFor, craftNextLevelDef, craftProficiencyFor, craftYieldPctFor, dailyCommissionById, dropTierDef, eventPackOf, eventReleaseVersion, eventReleasedForDeck, eventUnlockedForLife, forgeCandidatesFor, forgeTierByTier, locationDropAt, reincarnationPointsForGrade, reincarnationPointsForShards, sealedEggAtLocation, signInByLocation, signInTierDef, techniqueDropTier, techniqueProfGainFor, timeCostMonths, timedEventById, travelMonthsTo } from "./content";
 export { CRAFT_KINDS } from "./content";
 export type { CraftKind, CraftSkillsDef, CraftLevelDef, CraftBreakthroughDef, CraftKindDef } from "./content";
 export type { TimeCostsDef, TimeCostKey } from "./content";

@@ -16,6 +16,8 @@ import type { ActKind, CommissionKind, DrawField, EconomyKind, PointsAttr, SectK
 import { ART_BY_KEY, LOCATIONS, PLAN_LABEL, TREASURE_OPTIONS, heroImg, portraitImg, realmImg } from "./display-data";
 import { Bar, Dice, FateWheel, Seal, ageTextOf } from "./widgets";
 import { ReincarnationPanel, memoryPreview } from "./ReincarnationPanel";
+import { TechniquesPage } from "./TechniquesPage";
+import { KnowledgeCodexPage } from "./KnowledgeCodexPage";
 
 // ---------- game board ----------
 
@@ -60,7 +62,7 @@ const ROUTE_NODE_META: Record<string, { icon: string; label: string; sub: string
   rest: { icon: "憩", label: "休息", sub: "休整一月 · 回血 + 修为" },
 };
 
-export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRouteNode, onAbandonRoute, onTravel, onBury, onJade, onPrepare, prepareFailed, onAllocatePoints, onResetDraw, onBuyBoon, onKeepsake, onReincarnate, onDraw, drawing, onChoice, onTalents, onSect, onSetPlan, onRunPlan, onClearPlan, onFight, onEconomy, onSocial, onCommission, onTimedEvent, onForgeArtifact, onBuyOre }: {
+export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRouteNode, onAbandonRoute, onTravel, onBury, onJade, onPrepare, prepareFailed, onAllocatePoints, onResetDraw, onBuyBoon, onKeepsake, onSelectFreeTechnique, onReincarnate, onDraw, drawing, onChoice, onTalents, onSect, onSetPlan, onRunPlan, onClearPlan, onFight, onEconomy, onSocial, onCommission, onTimedEvent, onForgeArtifact, onBuyOre }: {
   state: State;
   busy: boolean;
   pendingKey: string | null;
@@ -77,6 +79,7 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
   onResetDraw: () => void;
   onBuyBoon: (boonId: string) => void;
   onKeepsake: (kind: "artifact" | "technique" | "treasure", id: string, locationId?: string) => void;
+  onSelectFreeTechnique: (id: string) => void;
   onReincarnate: (name: string) => void;
   onDraw: () => void;
   drawing: boolean;
@@ -96,6 +99,12 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
 }) {
   const c = state.character;
   const [tab, setTab] = useState<BoardTab>("role");
+  // U-613：修炼宗门下的二级页面——"main" 为宗门页本体，"techniques"
+  // 为功法页（已学功法总览）；离开修炼宗门页签时回到本体。
+  const [sectSub, setSectSub] = useState<"main" | "techniques">("main");
+  // U-086：轮回历史下的二级页面——"main" 为历史页本体（前世之谜/
+  // 轮回树/编年史），"codex" 为知识图鉴（跨世学过的功法与精通记录）。
+  const [historySub, setHistorySub] = useState<"main" | "codex">("main");
   const [showFragments, setShowFragments] = useState(false);
   const [buryPick, setBuryPick] = useState(false);
   const [showAllLog, setShowAllLog] = useState(false);
@@ -149,7 +158,7 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
       <div className="-mx-1 overflow-x-auto px-1 pb-0.5" role="tablist" aria-label="首页分页">
         <div className="flex min-w-max gap-1.5">
           {BOARD_TABS.map((t) => (
-            <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
+            <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => { setTab(t.id); if (t.id !== "sect") setSectSub("main"); }}
               className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 font-song text-sm font-black ${tab === t.id ? "bg-[var(--accent)] text-[var(--on-bright)]" : "bg-[var(--surface)] text-[var(--dim)]"}`}>
               <Seal ch={t.icon} /> {t.label}
             </button>
@@ -192,7 +201,7 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
           <span className="rounded-full bg-[var(--surface2)] px-2.5 py-1">灵根 · {c.rootName}</span>
           <span className="rounded-full bg-[var(--surface2)] px-2.5 py-1">{c.sectRankName ? `青云宗 · ${c.sectRankName}（贡献 ${c.sectContrib}）` : "未入宗门"}</span>
           <span className={`rounded-full px-2.5 py-1 ${c.artifactSealed ? "bg-[var(--gold-soft)] text-[var(--gold)]" : "bg-[var(--surface2)]"}`}>本命法宝 · {c.artifactName ? (c.artifactSealed ? `${c.artifactName}（境界不足，暂不可用：需${c.artifactMinRealmName}境，当前${state.realmNames[c.realmIdx] ?? ""}境，达门槛自动解封）` : `${c.artifactName}（需${c.artifactMinRealmName}境 ✓）`) : (state.settings.q9.value === "from_start" ? "暂无" : "暂无（Q9：死后从所得中挑）")}</span>
-          {c.techniqueName && <span className="rounded-full bg-[var(--surface2)] px-2.5 py-1">功法 · {c.techniqueName}</span>}
+          {c.techniqueName && <span className="rounded-full bg-[var(--surface2)] px-2.5 py-1">功法 · {c.techniqueName}{c.techniqueProgress?.mastered ? " · 精通" : ""}</span>}
           <span className="rounded-full bg-[var(--surface2)] px-2.5 py-1">战力 {c.might}</span>
           <span className="rounded-full bg-[var(--surface2)] px-2.5 py-1">神识 {c.sense}</span>
           <span className="rounded-full bg-[var(--surface2)] px-2.5 py-1">机缘 {c.fortune}</span>
@@ -243,7 +252,7 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
       {c.dead ? (
         <>
           <p className="rounded-xl bg-[var(--gold-soft)] p-3 text-sm">记忆预判：{memoryPreview(c, state.settings.q3.value, state.settings.q7.value)}。进入结算后揭晓，并按评级发放传承点与天赋候选。</p>
-          <ReincarnationPanel state={state} busy={busy} prepareFailed={prepareFailed} onPrepare={onPrepare} onAllocatePoints={onAllocatePoints} onResetDraw={onResetDraw} onBuyBoon={onBuyBoon} onKeepsake={onKeepsake} onConfirm={onReincarnate} onDraw={onDraw} drawing={drawing} onChoice={onChoice} onTalents={onTalents} />
+          <ReincarnationPanel state={state} busy={busy} prepareFailed={prepareFailed} onPrepare={onPrepare} onAllocatePoints={onAllocatePoints} onResetDraw={onResetDraw} onBuyBoon={onBuyBoon} onKeepsake={onKeepsake} onSelectFreeTechnique={onSelectFreeTechnique} onConfirm={onReincarnate} onDraw={onDraw} drawing={drawing} onChoice={onChoice} onTalents={onTalents} />
         </>
       ) : c.pendingEvent ? (
         /* 待决事件（常驻：探索在哪页触发，选项就在哪页结算，不跳页） */
@@ -319,8 +328,9 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
         <section aria-label="行动" className="rounded-[var(--radius)] bg-[var(--surface)] p-4">
           <p className="mb-2.5 text-sm font-bold">这一程，做点什么？<span className="ml-2 text-xs font-normal text-[var(--dim)]">时间按月流逝（细时钟）：修炼耗 {costOf("cultivate")} 月 · 突破耗 {costOf("breakthrough")} 月 · 休整耗 {costOf("rest")} 月，余项见「地图探索」页的细时钟耗时表 · 本周同类收益会衰减 · 也可排预设路线自动连走</span></p>
           <div className="grid grid-cols-3 gap-2 touch-manipulation">
+            {/* U-627：无灵根角色的修炼动作即「炼体」（服务端按体魄驱动结算），按钮随灵根换口径 */}
             <button type="button" disabled={busy} onClick={() => onAct("cultivate")} className="rounded-xl bg-[var(--accent)] p-3 text-center text-[var(--on-bright)] transition active:scale-95 disabled:opacity-40">
-              <span className="block font-brush text-2xl" aria-hidden>{pendingKey === "act:cultivate" ? "…" : "修"}</span><span className="mt-1 block text-sm font-bold">修炼</span><span className="block text-[11px] opacity-85">修为上升</span>
+              <span className="block font-brush text-2xl" aria-hidden>{pendingKey === "act:cultivate" ? "…" : c.rootId === "noroot" ? "炼" : "修"}</span><span className="mt-1 block text-sm font-bold">{c.rootId === "noroot" ? "炼体" : "修炼"}</span><span className="block text-[11px] opacity-85">{c.rootId === "noroot" ? "以体魄锤炼 · 修为上升" : "修为上升"}</span>
             </button>
             <button type="button" disabled={busy || !canBreak} onClick={() => onAct("breakthrough")} className="rounded-xl bg-[var(--red)] p-3 text-center text-[var(--on-bright)] transition active:scale-95 disabled:opacity-40" aria-label={canBreak ? "突破境界" : `突破境界，修为还差 ${state.threshold - c.cultivation}`}>
               <span className="block font-brush text-2xl" aria-hidden>{pendingKey === "act:breakthrough" ? "…" : "破"}</span><span className="mt-1 block text-sm font-bold">突破</span><span className="block text-[11px] opacity-85">{canBreak ? (c.breakFails > 0 ? `渡关 · 保底−${Math.min(20, c.breakFails * 5)}` : "d100 渡关") : `还差 ${state.threshold - c.cultivation}`}</span>
@@ -344,7 +354,7 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
               </>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
-                <p className="min-w-0 flex-1 text-xs">路线未走完：<b>{c.quickPlan.map((s) => `${PLAN_LABEL[s.kind] ?? s.kind}×${s.count}`).join(" → ")}</b></p>
+                <p className="min-w-0 flex-1 text-xs">路线未走完：<b>{c.quickPlan.map((s) => `${c.rootId === "noroot" && s.kind === "cultivate" ? "炼体" : PLAN_LABEL[s.kind] ?? s.kind}×${s.count}`).join(" → ")}</b></p>
                 <button type="button" disabled={busy} onClick={onRunPlan} className="rounded-full bg-[var(--accent)] px-3.5 py-2 text-xs font-bold text-[var(--on-bright)] transition active:scale-95 disabled:opacity-40">{pendingKey === "plan" ? "执行中…" : "▶ 继续执行"}</button>
                 <button type="button" disabled={busy} onClick={onClearPlan} className="rounded-full bg-[var(--surface2)] px-3.5 py-2 text-xs font-bold transition active:scale-95 disabled:opacity-40">✕ 清空路线</button>
               </div>
@@ -361,7 +371,7 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
             <span className="ml-2 text-xs opacity-85">{buriedHere.length > 0 ? "此地有前世遗藏！" : "踏上分叉路线"}</span>
           </button>
         </section>
-      ) : tab === "sect" && !c.dead ? (
+      ) : tab === "sect" && sectSub === "main" && !c.dead ? (
         /* ===== 修炼宗门页：副职（炼丹/炼器/灵田/垂钓，随所在地点而定） ===== */
         <section aria-label="副职" className="rounded-[var(--radius)] bg-[var(--surface)] p-4">
           <p className="mb-2.5 text-sm font-bold">副职 · 在{currentLoc?.name}可做的营生<span className="ml-2 text-xs font-normal text-[var(--dim)]">耗 {costOf("craft")} 月 · 换个地点，副职也跟着变</span></p>
@@ -453,9 +463,38 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
                   <img src={l.img} alt="" loading="lazy" decoding="async" className={`h-24 w-full object-cover ${locked ? "opacity-50 grayscale" : ""}`} />
                   <span className="absolute inset-x-0 bottom-0 block bg-gradient-to-t from-black/75 to-transparent p-2 pt-6">
                     <span className="block font-song text-sm font-bold text-[var(--on-bright)]">{pendingKey === `travel:${l.id}` ? "启程中…" : <>{locked ? "锁 " : ""}{l.name} {here && <span className="ml-1 rounded bg-[var(--gold)] px-1.5 py-0.5 text-[10px] text-[var(--on-bright)]">在此</span>}</>}</span>
-                    <span className="block text-[11px] text-white/85">{locked ? (ls?.lockReason ?? "") : l.desc}{!locked && !here ? ` · 启程 ${travelOf(l.id)} 月` : ""}{!locked && ls && ls.decayPct < 100 ? ` · 本周收益 ${ls.decayPct}%` : ""}</span>
+                    <span className="block text-[11px] text-white/85">{locked ? (ls?.lockReason ?? "") : l.desc}{!locked && !here ? ` · 启程 ${travelOf(l.id)} 月` : ""}{!locked && ls && ls.decayPct < 100 ? ` · 本周收益 ${ls.decayPct}%` : ""}{!locked && ls ? ` · 事件${ls.densityWord}` : ""}</span>
                   </span>
                 </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* ===== 地图探索页：三界秘境（U-401 固定掉落槽与隐藏 Boss） ===== */}
+      {tab === "map" && !c.dead && (
+        <section aria-label="三界秘境" className="rounded-[var(--radius)] bg-[var(--surface)] p-4">
+          <h2 className="font-brush text-base font-black"><Seal ch="境" /> 三界秘境 <span className="text-xs font-normal text-[var(--dim)]">每界每世各藏三份秘藏：稀有丹药、失传典籍、秘境之主——探索时丹药/典籍各有 {state.secretRealms.slotChancePct}% 概率寻得（领完本世即空，轮回重置）；秘境之主须先在该界触发专属前置际遇才会被惊动，现身概率 {state.secretRealms.bossChancePct}%，打赢得传承点与该档法宝，败北可再战</span></h2>
+          <div className="mt-3 space-y-2">
+            {state.secretRealms.realms.map((r) => {
+              const pillText = "丹药 · " + r.pillName + "×" + r.pillCount + (r.pillClaimed ? "（本世已领）" : "");
+              const techText = "典籍 · " + r.techGrade + "阶失传功法" + (r.techClaimed ? "（本世已领）" : "");
+              const bossText = "秘境之主 · " + r.bossName + (r.bossDefeated ? "（本世已击败）" : r.bossReady ? "（已被惊动，随时现身）" : "（沉睡中 · 先触发前置际遇）");
+              const bossCls = r.bossDefeated ? "bg-[var(--surface2)] text-[var(--dim)]" : r.bossReady ? "bg-[var(--red)] text-[var(--on-bright)]" : "bg-[var(--surface2)] text-[var(--dim)]";
+              return (
+              <div key={r.locationId} className={`rounded-xl border p-3 ${r.atLocation ? "border-[var(--gold)] bg-[var(--gold-soft)]" : "border-[var(--border)] bg-[var(--bg)]"}`}>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                  <span className="font-song text-sm font-bold">{r.locationName}</span>
+                  {r.atLocation && <span className="rounded bg-[var(--gold)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--on-bright)]">在此</span>}
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
+                  <span className={`rounded-full px-2 py-0.5 font-bold ${r.pillClaimed ? "bg-[var(--surface2)] text-[var(--dim)]" : "bg-[var(--accent-soft)] text-[var(--accent)]"}`}>{pillText}</span>
+                  <span className={`rounded-full px-2 py-0.5 font-bold ${r.techClaimed ? "bg-[var(--surface2)] text-[var(--dim)]" : "bg-[var(--accent-soft)] text-[var(--accent)]"}`}>{techText}</span>
+                  <span className={`rounded-full px-2 py-0.5 font-bold ${bossCls}`}>{bossText}</span>
+                </div>
+                {!r.bossDefeated && <p className="mt-1 text-[11px] leading-relaxed text-[var(--dim)]">{r.bossIntro}</p>}
+              </div>
               );
             })}
           </div>
@@ -528,7 +567,7 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
       {/* ===== 地图探索页：限时帖（U-389 限时事件） ===== */}
       {tab === "map" && !c.dead && (
         <section aria-label="限时帖" className="mt-4 rounded-[var(--radius)] bg-[var(--surface)] p-4">
-          <h2 className="font-brush text-base font-black"><Seal ch="帖" /> 限时帖 <span className="text-xs font-normal text-[var(--dim)]">群友发布的限时委托 · 带倒计时（按天/月计）· 接帖后须在限期内办妥，超时即失败 · 接与不接、成与败都动声望（只记在发布人情谊与宗门贡献上）· 须身在张贴处揭帖与交帖 · 同时可接 {state.timedEvents.maxActive} 张{state.timedEvents.completedCount > 0 ? ` · 本世已办妥 ${state.timedEvents.completedCount} 件` : ""}{state.timedEvents.failedCount > 0 ? ` · 失败 ${state.timedEvents.failedCount} 件` : ""}{state.timedEvents.lapsedCount > 0 ? ` · 过期 ${state.timedEvents.lapsedCount} 张` : ""}</span></h2>
+          <h2 className="font-brush text-base font-black"><Seal ch="帖" /> 限时帖 <span className="text-xs font-normal text-[var(--dim)]">群友发布的限时委托 · 带倒计时（按天/月计）· 接帖后须在限期内办妥，超时即失败 · 接、成、败动声望（只记在发布人情谊与宗门贡献上），不接过期不动声望、也不再重挂· 须身在张贴处揭帖与交帖 · 同时可接 {state.timedEvents.maxActive} 张{state.timedEvents.completedCount > 0 ? ` · 本世已办妥 ${state.timedEvents.completedCount} 件` : ""}{state.timedEvents.failedCount > 0 ? ` · 失败 ${state.timedEvents.failedCount} 件` : ""}{state.timedEvents.lapsedCount > 0 ? ` · 过期 ${state.timedEvents.lapsedCount} 张` : ""}</span></h2>
 
           {state.timedEvents.active.length > 0 && (
             <div className="mt-3 space-y-2">
@@ -786,7 +825,7 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
       )}
 
       {/* ===== 修炼宗门页：宗门系统（Q14） ===== */}
-      {tab === "sect" && !c.dead && (
+      {tab === "sect" && sectSub === "main" && !c.dead && (
         <section aria-label="宗门" className="rounded-[var(--radius)] bg-[var(--surface)] p-4">
           <p className="text-sm font-bold"><Seal ch="宗" /> 宗门 · 青云宗 {c.sectRankName ? <span className="ml-1 rounded bg-[var(--accent)] px-1.5 py-0.5 text-[11px] text-[var(--on-bright)]">{c.sectRankName}</span> : <span className="ml-1 text-xs font-normal text-[var(--dim)]">尚未入门</span>}
             {c.sectRankName && <span className="ml-2 text-xs font-normal text-[var(--dim)]">贡献 {c.sectContrib}{c.sectNext ? ` · 晋升${c.sectNext.name}需贡献 ${c.sectNext.contribNeed} + ${state.realmNames[c.sectNext.realmNeed] ?? ""}境${c.sectNext.grantName ? ` · 晋升赐宝「${c.sectNext.grantName}」` : ""}` : " · 已至长老"}</span>}
@@ -820,20 +859,49 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
         </section>
       )}
 
-      {/* ===== 修炼宗门页：功法 ===== */}
-      {tab === "sect" && (
+      {/* ===== 修炼宗门页：功法（摘要 + U-613 功法页入口） ===== */}
+      {tab === "sect" && sectSub === "main" && (
         <section aria-label="功法" className="rounded-[var(--radius)] bg-[var(--surface)] p-4">
           <h2 className="font-brush text-base font-black"><Seal ch="法" /> 功法</h2>
           {c.techniqueName ? (
-            <p className="mt-1.5 text-sm">当前修习 · <b>{c.techniqueName}</b><span className="ml-2 text-xs text-[var(--dim)]">功法加成已计入检定与修炼</span></p>
+            <div className="mt-1.5">
+              <p className="text-sm">当前修习 · <b>{c.techniqueName}</b>
+                {c.techniqueProgress && <span className="ml-2 rounded bg-[var(--ink)] px-1.5 py-0.5 align-middle text-[11px] font-bold text-[var(--on-ink)]">{c.techniqueProgress.grade}阶</span>}
+                {c.techniqueProgress && <span className="ml-2 text-xs text-[var(--dim)]">{c.techniqueProgress.kind}</span>}
+                {c.techniqueProgress?.mastered && <span className="ml-2 rounded bg-[var(--seal)] px-1.5 py-0.5 align-middle text-[11px] font-bold text-[#f7f1de]">精通</span>}
+                <span className="ml-2 text-xs text-[var(--dim)]">功法加成已计入检定与修炼</span></p>
+              {c.techniqueProgress && (
+                <div className="mt-2.5 max-w-md">
+                  <Bar label={c.techniqueProgress.mastered ? `第 ${c.techniqueProgress.layer} 层 · 圆满` : `第 ${c.techniqueProgress.layer} 层`} value={c.techniqueProgress.layerPoints} max={c.techniqueProgress.pointsPerLayer} color="var(--gold)" icon="层" />
+                  <p className="mt-1.5 text-xs leading-relaxed text-[var(--dim)]">
+                    {c.techniqueProgress.mastered
+                      ? <>已修满全部 {c.techniqueProgress.totalLayers ?? 0} 层，臻至精通：修炼加成 +{c.techniqueProgress.effectiveBonusPct}%（基础 +{c.techniqueProgress.bonusPct}% + 精通一档 +{c.techniqueProgress.masteryStepPct}%）。</>
+                      : c.techniqueProgress.totalLayers !== null && c.techniqueProgress.totalPoints !== null
+                        ? <>第 {c.techniqueProgress.layer}/{c.techniqueProgress.totalLayers} 层 · 本层 {c.techniqueProgress.layerPoints}/{c.techniqueProgress.pointsPerLayer} 点，距修满精通还差 {c.techniqueProgress.totalPoints - c.techniqueProgress.points} 点，精通后修炼加成自 +{c.techniqueProgress.bonusPct}% 提升至 +{c.techniqueProgress.bonusPct + c.techniqueProgress.masteryStepPct}%（上升一档）。</>
+                        : <>第 {c.techniqueProgress.layer} 层 · 本层 {c.techniqueProgress.layerPoints}/{c.techniqueProgress.pointsPerLayer} 点，此功法层数无上限。</>}
+                    斗法与修炼中施展此功法，都会攒进度点、攒满一层进下一层。
+                  </p>
+                </div>
+              )}
+            </div>
           ) : (
             <p className="mt-1.5 text-sm text-[var(--dim)]">尚未习得功法。功法可在轮回结算时用传承点赎回，带入下一世修习。</p>
           )}
+          {/* U-613：功法页入口——已学功法总览在二级页面集中展示 */}
+          <button type="button" onClick={() => setSectSub("techniques")}
+            className="mt-3 rounded-full bg-[var(--surface2)] px-3.5 py-2 text-xs font-bold transition active:scale-95">
+            功法页 · 已学功法总览 ›
+          </button>
         </section>
       )}
 
+      {/* ===== 修炼宗门页 · 二级页面：功法页（U-613） ===== */}
+      {tab === "sect" && sectSub === "techniques" && (
+        <TechniquesPage state={state} onBack={() => setSectSub("main")} />
+      )}
+
       {/* 斗法（Q15）：有待决事件时先处理事件 */}
-      {tab === "sect" && !c.dead && !c.pendingEvent && state.enemiesHere.length > 0 && (
+      {tab === "sect" && sectSub === "main" && !c.dead && !c.pendingEvent && state.enemiesHere.length > 0 && (
         <section aria-label="斗法" className="rounded-[var(--radius)] bg-[var(--surface)] p-4">
           <h2 className="font-brush text-base font-black"><Seal ch="斗" /> 斗法 <span className="text-xs font-normal text-[var(--dim)]">斗法骰 d20 · 战力计入骰面 vs 按敌手境界定的难度 · 赢得越漂亮奖越多，输得越惨伤越重 · 耗 {costOf("fight")} 月</span></h2>
           <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -987,7 +1055,7 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
       {/* ===== 社交经济页：埋遗藏 + 因果待办（前世遗藏） ===== */}
       {tab === "social" && !c.dead && !c.pendingEvent && (
         <section aria-label="埋下遗藏" className="rounded-[var(--radius)] bg-[var(--surface)] p-4">
-          <h2 className="font-brush text-base font-black"><Seal ch="藏" /> 埋下遗藏 <span className="text-xs font-normal text-[var(--dim)]">藏器于野，留待来世在同一地点探索取回</span></h2>
+          <h2 className="font-brush text-base font-black"><Seal ch="藏" /> 埋下遗藏 <span className="text-xs font-normal text-[var(--dim)]">藏器于野，留待来世在同一地点探索取回 · 埋藏须封入等值的自有修为/灵石（埋多少、取回多少）</span></h2>
           <div className="mt-2 flex flex-wrap gap-2">
             <button type="button" disabled={busy} onClick={() => setBuryPick(!buryPick)} aria-expanded={buryPick}
               className="rounded-full bg-[var(--surface2)] px-3.5 py-2 text-xs font-bold disabled:opacity-40">
@@ -998,12 +1066,21 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
             <div className="mt-2 grid grid-cols-2 gap-2">
               {TREASURE_OPTIONS.map((t) => {
                 const already = state.buried.some((b) => b.treasureName === t.name);
+                // 埋藏须真实封入等值自有资源（与取回所得等值）：付
+                // 不起就预先禁用并写明缺什么，服务端同口径复核。
+                const lacks: string[] = [];
+                if (t.cult > 0 && c.cultivation < t.cult) lacks.push(`修为需 ${t.cult}（现有 ${c.cultivation}）`);
+                if (t.stones > 0 && c.stones < t.stones) lacks.push(`灵石需 ${t.stones}（现有 ${c.stones}）`);
+                const costText = [t.cult > 0 ? `修为 ${t.cult}` : "", t.stones > 0 ? `灵石 ${t.stones}` : ""].filter(Boolean).join("、");
                 return (
-                  <button key={t.id} type="button" disabled={busy} onClick={() => { onBury(t.id); setBuryPick(false); }}
+                  <button key={t.id} type="button" disabled={busy || lacks.length > 0} onClick={() => { onBury(t.id); setBuryPick(false); }}
+                    aria-label={`埋下${t.name}：封入${costText}，后世取回等值所得${lacks.length > 0 ? `；现在埋不下：${lacks.join("、")}` : ""}`}
                     className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 text-left disabled:opacity-50">
                     <span className="glyph-tile text-xl" aria-hidden>{t.icon}</span>
                     <span className="ml-1 font-song text-sm font-bold">{t.name}</span>
                     <span className="mt-0.5 block text-[11px] text-[var(--dim)]">{t.desc} · 埋于{currentLoc?.name}{already ? "（本世已埋过同类）" : ""}</span>
+                    <span className="mt-0.5 block text-[11px] font-bold text-[var(--gold)]">埋藏封入：{costText}（当场扣除）</span>
+                    {lacks.length > 0 && <span className="mt-0.5 block text-[11px] font-bold text-[var(--red)]">埋不下：{lacks.join("、")}</span>}
                   </button>
                 );
               })}
@@ -1028,7 +1105,7 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
       )}
 
       {/* ===== 轮回历史页：前世之谜（Q16 轻主线，跨世累计） ===== */}
-      {tab === "history" && (
+      {tab === "history" && historySub === "main" && (
       <section aria-label="前世之谜" className="rounded-[var(--radius)] bg-[var(--surface)] p-4">
         <h2 className="font-brush text-base font-black"><Seal ch="谜" /> 前世之谜 <span className="text-xs font-normal text-[var(--dim)]">封印的前世记忆碎片 · 藏在机缘与轮回里 · 不集也不挡路</span></h2>
         <div className="mt-2 flex items-center gap-1.5" role="img" aria-label={`记忆碎片 ${state.mainline.shards}/${state.mainline.total}`}>
@@ -1054,8 +1131,29 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
       </section>
       )}
 
+      {/* ===== 轮回历史页：知识图鉴入口（U-086，与前世之谜/轮回树并列） ===== */}
+      {tab === "history" && historySub === "main" && (
+      <section aria-label="知识图鉴" className="rounded-[var(--radius)] bg-[var(--surface)] p-4">
+        <h2 className="font-brush text-base font-black"><Seal ch="鉴" /> 知识图鉴 <span className="text-xs font-normal text-[var(--dim)]">历世学过的功法永久收录 · 轮回不清零 · 精通有记</span></h2>
+        <p className="mt-1.5 text-sm leading-relaxed text-[var(--dim)]">
+          {state.knowledgeCodex.count > 0
+            ? <>已收录 <b className="text-[var(--text)]">{state.knowledgeCodex.count}</b> 门功法，其中 <b className="text-[var(--text)]">{state.knowledgeCodex.masteredCount}</b> 门曾臻精通、留有精通印记。后世重学图鉴在册的功法有图鉴之助：曾精通的按其印记深浅起步（印记越深、开局层数起点与增长加成越高），轮回结算时还可凭印记免费带走一门。</>
+            : <>还没有收录任何功法。学到第一门功法时，它就会录入图鉴，从此轮回不清空；后世重学时还有图鉴之助。</>}
+        </p>
+        <button type="button" onClick={() => setHistorySub("codex")}
+          className="mt-3 rounded-full bg-[var(--surface2)] px-3.5 py-2 text-xs font-bold transition active:scale-95">
+          知识图鉴 · 历世所学总览 ›
+        </button>
+      </section>
+      )}
+
+      {/* ===== 轮回历史页 · 二级页面：知识图鉴（U-086） ===== */}
+      {tab === "history" && historySub === "codex" && (
+        <KnowledgeCodexPage state={state} onBack={() => setHistorySub("main")} />
+      )}
+
       {/* ===== 轮回历史页：轮回树 ===== */}
-      {tab === "history" && showTree && (
+      {tab === "history" && historySub === "main" && showTree && (
         <section aria-label="轮回树" className="cv-auto">
           <h2 className="mb-2 font-brush text-lg font-black"><Seal ch="轮" /> 轮回树 <span className="text-xs font-normal text-[var(--dim)]">最近两世展开，更早的世点开看详情</span></h2>
           <div className="relative space-y-2.5">
@@ -1102,7 +1200,7 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
       )}
 
       {/* ===== 轮回历史页：前尘残片 ===== */}
-      {tab === "history" && state.fragments.length > 0 && (
+      {tab === "history" && historySub === "main" && state.fragments.length > 0 && (
         <section aria-label="前尘残片">
           <button type="button" aria-expanded={showFragments} onClick={() => setShowFragments(!showFragments)} className="mb-2 font-brush text-lg font-black">
             <Seal ch="尘" /> 前尘残片 <span className="text-xs font-normal text-[var(--dim)]">前几世只剩这些关键词记得 · {showFragments ? "收起" : "展开查阅"}</span>
@@ -1121,7 +1219,7 @@ export function GameBoard({ state, busy, pendingKey, onAct, onChoose, onChooseRo
       )}
 
       {/* ===== 轮回历史页：编年史 ===== */}
-      {tab === "history" && (
+      {tab === "history" && historySub === "main" && (
       <section aria-label="编年史" className="cv-auto">
         <h2 className="mb-2 font-brush text-lg font-black"><Seal ch="史" /> 编年史</h2>
         <div className="space-y-1.5">

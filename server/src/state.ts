@@ -5,8 +5,8 @@ import type { Ctx } from "./platform";
 import { GAME_SLOT, saveStorageFor } from "./storage";
 import { applySaveFieldDefaults } from "./savefields";
 import {
-ARTIFACTS, ARTIFACT_SOURCES, CLASSIC_REALMS, COMMISSIONS, CRAFT_SKILLS, CURRENT_EVENT_VERSION, DAILY_COMMISSIONS, ENEMIES, FORGE, LOCATION_DROPS, LOCATIONS, MAINLINE_CHAPTERS, MAINLINE_TOTAL_SHARDS, SEALED_EGGS, SECT_RANKS, SHORT_REALMS, SIGN_INS, STAGES, TIME_COSTS, TIMED_EVENTS, TREASURES, artifactById, birthBoonById, combatDc, commissionById, craftLevelDefFor, craftProficiencyFor, craftYieldPctFor, dailyCommissionById, dropTierDef, eventReleasedForDeck, eventUnlockedForLife, locById, locationDropAt, npcById, sealedEggAtLocation, signInByLocation, signInTierDef, techById, timeCostMonths, timedEventById, travelMonthsTo,
-type ArtifactDef, type ArtifactFx, type CommissionDef, type DailyCommissionDef, type EnemyDef, type ForgeTierDef, type LocationDef, type RealmDef, type RelKind, type SealedEggDef, type SignInSpotDef, type TalentDef, type TimedEventDef, type TimedRepDelta, type TimeCostKey
+ARTIFACTS, ARTIFACT_SOURCES, CLASSIC_REALMS, COMMISSIONS, CRAFT_SKILLS, CURRENT_EVENT_VERSION, DAILY_COMMISSIONS, ENEMIES, EXPLORE_TUNING, FORGE, LOCATION_DROPS, LOCATIONS, MAINLINE_CHAPTERS, MAINLINE_TOTAL_SHARDS, NO_ROOT_ID, NO_ROOT_STARTER_TECH_ID, SEALED_EGGS, SECRET_REALMS, SECT_RANKS, SHOP, SHORT_REALMS, SIGN_INS, STAGES, TECHNIQUES, TECHNIQUE_MASTERY, TIME_COSTS, TIMED_EVENTS, TREASURES, artifactById, birthBoonById, combatDc, commissionById, craftLevelDefFor, craftProficiencyFor, craftYieldPctFor, dailyCommissionById, defaultHiddenSlots, dropTierDef, eventReleasedForDeck, eventUnlockedForLife, exploreTuningFor, locById, locationDropAt, clampImprint, imprintValuesFor, npcById, sealedEggAtLocation, secretRealmAt, signInByLocation, signInTierDef, techById, techLayerBreakdown, techLayerText, techTotalPoints, techniqueProfGainFor, timeCostMonths, timedEventById, travelMonthsTo,
+type ArtifactDef, type ArtifactFx, type CommissionDef, type DailyCommissionDef, type EnemyDef, type ForgeTierDef, type LocationDef, type RealmDef, type RelKind, type SealedEggDef, type SecretRealmDef, type SignInSpotDef, type TalentDef, type TechDef, type TechniqueProfSource, type TimedEventDef, type TimedRepDelta, type TimeCostKey
 } from "./data";
 import { ATTR_NAME, EVENTS, formatEffectGains, type Effect, type EventDef } from "./events";
 import { SeededRng, makeSeed, randomSet, uniformTable, weighted, weightedDeckCards } from "./rng";
@@ -92,9 +92,9 @@ export function emptyCommissionState(): CommissionState {
 // 换算成新天序（见该函数），不直接判超时。
 export interface TimedPosting { id: string; postedDay: number }
 export interface ActiveTimedEvent { id: string; progress: number; done: boolean; deadlineDay: number }
-export interface TimedEventState { board: TimedPosting[]; active: ActiveTimedEvent[]; completedCount: number; failedCount: number; lapsedCount: number }
+export interface TimedEventState { board: TimedPosting[]; active: ActiveTimedEvent[]; completedCount: number; failedCount: number; lapsedCount: number; lapsedIds: string[] }
 export function emptyTimedEventState(): TimedEventState {
-  return { board: [], active: [], completedCount: 0, failedCount: 0, lapsedCount: 0 };
+  return { board: [], active: [], completedCount: 0, failedCount: 0, lapsedCount: 0, lapsedIds: [] };
 }
 
 // U-390 日常委托事件池（来源 B-66《我的微信连三界》，拆自 v1 U-47
@@ -198,6 +198,32 @@ export interface Keepsake { kind: "artifact" | "technique" | "treasure"; id: str
 // Q18 社交：一段关系。bond 对友好关系是情谊（0–100），对仇敌是仇怨（0–100）。
 export interface Relation { npcId: string; name: string; kind: RelKind; bond: number; note: string }
 export interface Pills { heal: number; cult: number; brk: number }
+// U-612：一门功法的进度（存档形态）。U-626 起存总点数 points
+// （0 起，攒满该功法总点数 = 总层数 × 每层点数即修满全部层数），
+// 层数与层内点都是 points 的派生量（content.ts 的 techLayer-
+// Breakdown），不另存；mastered 为精通标记（修满全部层数时由结
+// 算置 true，此后不回退——精通档是既得状态，配置层数日后调整
+// 也不收回）。旧存档的 prof（0–100 熟练度）由读档迁移按比例换
+// 算为 points（migrateTechProgressLayers），迁移前经 techPro-
+// gressOf 读取时也按同一口径即时换算，prof 字段仅作迁移输入、
+// 不再写回。
+// U-086：relearned 为本世重学标记——本世学到的这门功法在学会当刻
+// 已在知识图鉴里（前世学过），本世攒点涨幅带图鉴加成；缺省
+// （旧存档/初学）为 undefined = 无加成。
+// U-614：relearnImprint 为本世重学时锁定的印记强度快照——学会
+// 当刻按图鉴该功法的当前 t 落定，本世内涨幅按此 t 换算（换算在
+// content.ts 的 imprintValuesFor），本世中途图鉴 t 变化不追溯改
+// 本世待遇；缺省（旧存档只有 relearned 无快照）按 t=100 取值，
+// 与 U-086 固定口径（起始占比 10% / +25%）一致。
+export interface TechProgressEntry { points: number; mastered: boolean; relearned?: boolean; relearnImprint?: number; prof?: number }
+// U-086 知识图鉴条目（跨世）：某门功法是否曾臻至精通（mastered）。
+// 学会即收录（条目存在 = 学会过），精通记录供 U-614 轮回结算自选
+// 免费带走时读取。图鉴本体在 GameState.knowledgeCodex（键 = 功法 id）。
+// U-614：imprint 为精通印记强度 t（0–100，连续值）——只对曾精通
+// 条目有意义：轮回结算时本世精通回满 100、未精通按本世最终熟
+// 练度衰减（reincarnation.ts 的 settleMasteryImprints），最低 0、
+// 永不遗忘。旧存档条目无此字段 = t 100，由 codexImprintOf 收敛。
+export interface KnowledgeCodexEntry { mastered: boolean; imprint?: number }
 export interface Character {
   name: string; origin: string; rootId: string; rootName: string; artifactId: string; artifactName: string;
   // U-618 本命法宝分级门槛：法宝属性修正是否已落到四维上。持有法宝
@@ -270,13 +296,61 @@ export interface Character {
   // craft-skills.json），不另存。旧存档缺失时由存档字段注册表补 {}
   // （四门皆 0 次、熟练度 0，与计划口径「旧存档默认 0」一致）。
   craftUses: Record<string, number>;
+  // U-612 功法熟练度层（Q38）；U-626 改层数口径：每门已学功法的
+  // 总点数与精通标记，键 = 功法 id、值 = { points 总点数, mas-
+  // tered 是否已精通 }（缺键 = 该功法 0 点、未精通）。数值口径
+  // （总层数在 techniques.json 逐门声明、每层点数/斗法·修炼·练
+  // 习三路涨幅/精通加成档步长在 technique-mastery.json），结算
+  // 走 gainTechniqueProficiency。本世内累计（与副职熟练度
+  // craftUses 同口径，轮回不带走：降生构造点给 {}；跨世的知识
+  // 继承走 U-086 知识图鉴 knowledgeCodex——重学时的起始点数在
+  // 本字段落定并打 relearned 标记）。旧存档缺失时由存档字段注
+  // 册表补 {}（全部功法默认 0/未精通）；旧存档的 prof 由读档迁
+  // 移按比例换算为 points（migrateTechProgressLayers）。
+  techProgress: Record<string, TechProgressEntry>;
   // U-464 锻造矿石：七阶矿石的本世持有数（键 = 配置表 forge.json
   // 的矿石 id，缺键 = 0 块）——锻造法宝的耗材，来源只有坊市购买
   // 与探索拾得两条（配置表定价/掉率，不凭空发放）。与丹药囊同口
   // 径：本世持有、轮回不带走。旧存档缺失时由存档字段注册表补 {}
   // （一无所有，与「不凭空发」一致）。
   ores: Record<string, number>;
+  // U-399 隐藏要素埋点剩余（本世）：键 = 地点 id、值为本世该地点尚
+  // 可被发现的隐藏要素数——每世初始值 = 配置表 explore-tuning.json
+  // 的 hiddenSlots，路线「事件」节点触发隐藏发现时扣减 1（见
+  // maybeHiddenDiscovery）。本世制（与签到/矿石同口径，轮回不带
+  // 走：降生构造点给配置默认值整表）；旧存档缺失时由存档字段注
+  // 册表按配置默认值整表补值（本世尚未发现过任何隐藏要素，与新
+  // 世同口径）。
+  hiddenSlots: Record<string, number>;
+  // U-401 秘境固定掉落槽（本世）：键 = 秘境地点 id、值为该秘境三
+  // 类槽的本世状态（丹药/典籍是否已领、Boss 前置是否已触发、Boss
+  // 是否已击败）——每世各一份、领完/打赢即空，轮回重置（降生构造
+  // 点给全未领初始态）；旧存档缺失时由存档字段注册表按全未领补值
+  // （与新世同口径）。定义与概率在配置表 secret-realms.json。
+  secretRealms: Record<string, SecretRealmLifeState>;
   relations: Relation[]; pills: Pills; caveLevel: number; breakBonus: number;
+}
+// U-401：一处秘境在本世的槽位状态（见 Character.secretRealms）。
+export interface SecretRealmLifeState { pillClaimed: boolean; techClaimed: boolean; bossReady: boolean; bossDefeated: boolean }
+export function emptySecretRealmLifeState(): SecretRealmLifeState {
+  return { pillClaimed: false, techClaimed: false, bossReady: false, bossDefeated: false };
+}
+// 一份全新的本世秘境槽位初始表（键 = 配置表里每个秘境的地点 id）
+// ——降生构造点与旧存档迁移补值共用同一来源，返回新对象。
+export function defaultSecretRealmStates(): Record<string, SecretRealmLifeState> {
+  const out: Record<string, SecretRealmLifeState> = {};
+  for (const r of SECRET_REALMS.realms) out[r.locationId] = emptySecretRealmLifeState();
+  return out;
+}
+// 取某秘境的本世槽位状态（缺键时按未领补建并写回，保证调用方拿
+// 到的引用可直接改）。
+export function secretRealmStateOf(c: Character, locationId: string): SecretRealmLifeState {
+  if (!c.secretRealms) c.secretRealms = defaultSecretRealmStates();
+  const cur = c.secretRealms[locationId];
+  if (cur) return cur;
+  const fresh = emptySecretRealmLifeState();
+  c.secretRealms[locationId] = fresh;
+  return fresh;
 }
 export interface LifeRecord {
   lifeNo: number; name: string; realmText: string; age: number; cause: string; grade: string;
@@ -287,9 +361,12 @@ export interface PendingKeepsake {
   kind: "artifact" | "technique" | "treasure"; id: string; name: string; desc: string; cost: number;
   // U-618：仅法宝候选带门槛信息——minRealm/minRealmName 为该宝的境界
   // 使用门槛，locked 为本世止步境界未达门槛（候选仍列出、明示原因、
-  // 不可点选），lockReason 是给玩家看的不可选原因。功法/遗藏候选
-  // 不带这些字段，口径不变。
+  // 不可点选），lockReason 是给玩家看的不可选原因。遗藏候选不带
+  // 这些字段，口径不变。
   minRealm?: number; minRealmName?: string; locked?: boolean; lockReason?: string;
+  // U-626：仅功法候选带品阶标识（grade，techniques.json 的 grade
+  // 字段），结算面板据此在功法赎回卡上标品阶。
+  grade?: string;
 }
 // Q13：降生抽选——出身/命格/灵根/天赋各自独立，各抽 3 个候选，
 // 每项可随机（random=true）或自选其一（value 给出候选值）。
@@ -298,6 +375,19 @@ export interface BirthChoice { pool: string[]; value: string; random: boolean }
 export interface BirthDraw {
   origin: BirthChoice; destiny: BirthChoice; root: BirthChoice;
   talentChoices: TalentDef[]; chosenTalents: string[];
+}
+// U-614 免费带走候选：图鉴曾精通功法在本次结算生成时（印记衰
+// 减结算之后）的快照——imprint 为衰减后的当前印记强度 t，
+// startPoints / gainBonusPct 为按该 t 换算（imprintValuesFor）的
+// 带走待遇（下一世开局总点数起点 / 涨幅加成%），与图鉴重学同一
+// 条结算路径（recordTechniqueLearned 按图鉴当前 t 落定，快照仅
+// 供展示与候选资格判定，待遇以图鉴 t 为准、两者同源不会漂移）。
+// U-626：旧结算快照里的 startProf（0–100 熟练度口径）只作迁移
+// 输入——整形时按该功法总点数等比例换算为 startPoints，不再写回。
+export interface FreeTechniqueCandidate {
+  id: string; name: string; desc: string;
+  imprint: number; startPoints: number; gainBonusPct: number;
+  startProf?: number;
 }
 export interface Reincarnation {
   grade: string; legacyEarned: number;
@@ -309,6 +399,14 @@ export interface Reincarnation {
   shardPointsEarned: number;
   shardsThisLife: number;
   keepsakeCandidates: PendingKeepsake[]; keepsakes: Keepsake[];
+  // U-614：免费带走（不花传承点，限一门）——候选为图鉴曾精通功
+  // 法（结算生成时快照，图鉴无曾精通时为空数组、客户端不显示该
+  // 区）；freeTechniqueId 为已选定的那一门（未选为 null）。已选
+  // 的那一门不得再走传承点赎回（selectKeepsake 服务端拦截、赎回
+  // 候选下发时过滤）。旧结算（U-614 前生成）缺这两字段，由存档
+  // 注册表补空候选 / null（不追溯生成候选）。
+  freeTechniqueCandidates: FreeTechniqueCandidate[];
+  freeTechniqueId: string | null;
   chosenOrigin: string | null; memoryKept: boolean; memoryNote: string;
   artifactShattered: boolean;
 }
@@ -355,6 +453,17 @@ export interface GameState {
   // 轮回不清空；图鉴只记清单与档位（档位在配置表 tiers），不设图
   // 鉴货币、不影响任何结算。旧存档缺失按空列表兜底。
   signInCodex: string[];
+  // U-086 知识图鉴（跨世，轮回不清零）：学过的功法永久收录，键 =
+  // 功法 id、值 = { mastered 是否曾精通, imprint 精通印记强度 }。
+  // 收录发生在学会当刻（recordTechniqueLearned），精通标记在臻至
+  // 精通当刻同步（gainTechniqueProficiency）；旧存档缺失补 {}，
+  // 且 loadState 把当前角色已学/已精通的功法回填进来（见
+  // backfillKnowledgeCodex）。游戏内不存在独立的丹方知识对象
+  // （炼丹走通用产出、无配方收录），故图鉴本期只收功法。重学加
+  // 成按印记强度 t 换算（U-614 连续模型：参数在配置表
+  // technique-mastery.json，换算在 imprintValuesFor；印记随轮回
+  // 结算衰减/回满，最低 0、永不遗忘）。
+  knowledgeCodex: Record<string, KnowledgeCodexEntry>;
   // U-393 封印之蛋收集（跨世）：已拾蛋清单 / 累计拾取数 / 已换得
   // 的遗藏线索 / 已被线索指过的既有遗藏 / 线索标出的无主遗藏方
   // 位。轮回不清空；旧存档缺失由注册表补空状态。
@@ -397,7 +506,7 @@ export function defaultSettings(): Settings {
   };
 }
 export function defaultState(): GameState {
-  return { settings: defaultSettings(), rulesLocked: false, character: null, lives: [], log: [], logSeq: 0, fragments: [], buried: [], reincarnation: null, birthDraw: null, mainline: { shards: 0, done: false }, shardsAtLifeStart: 0, reincarnationPoints: 0, birthBoost: null, birthBoons: [], signInCodex: [], sealedEggs: emptySealedEggState(), rngSeq: 0, rngState: null };
+  return { settings: defaultSettings(), rulesLocked: false, character: null, lives: [], log: [], logSeq: 0, fragments: [], buried: [], reincarnation: null, birthDraw: null, mainline: { shards: 0, done: false }, shardsAtLifeStart: 0, reincarnationPoints: 0, birthBoost: null, birthBoons: [], signInCodex: [], knowledgeCodex: {}, sealedEggs: emptySealedEggState(), rngSeq: 0, rngState: null };
 }
 export function realmsFor(s: Settings): RealmDef[] {
   return s.q4.value === "short5" ? SHORT_REALMS : CLASSIC_REALMS;
@@ -503,6 +612,17 @@ export async function loadState(ctx: Ctx): Promise<GameState> {
         if (!parsed.signInCodex.includes(id)) parsed.signInCodex.push(id);
       }
     }
+    // U-086：知识图鉴回填——U-086 之前（或图鉴字段缺失）的旧存档，
+    // 当前角色已学/已精通的功法并入图鉴（只补记录、不发加成，本
+    // 世进度不动；口径见 backfillKnowledgeCodex）。与签到图鉴兜
+    // 底同为读档期派生处理，结果随后续动作存档一并持久化。
+    backfillKnowledgeCodex(parsed);
+    // U-626：功法层数读档迁移——当前角色 techProgress 里仍带旧
+    // prof（0–100 熟练度）的条目按比例换算改写为 points（层数口
+    // 径），已精通的修满；图鉴与印记不动。幂等，与图鉴回填同为
+    // 读档期派生处理，结果随后续动作存档一并持久化；导入存档同
+    // 经 loadState、一并覆盖。
+    migrateTechProgressLayers(parsed);
     // U-574：以存档里的显式 PRNG 流位置恢复序号——有 rngState 时以
     // 其 seq 为准（restoreRngState），无 rngState 的旧存档保留注册表
     // 补出的 rngSeq 原值按原有种子规则兜底，均不报错。
@@ -532,6 +652,17 @@ export function pushLog(state: GameState, lifeNo: number, kind: string, text: st
   state.logSeq += 1;
   state.log.unshift({ id: state.logSeq, lifeNo, kind, text });
   state.log = state.log.slice(0, 80);
+}
+
+// 待决事件拦截提示（2026-11-18 自测修复）：有待决事件未处理时，各
+// 动作的守卫不再静默返回——统一在此记一条明示原因的提示（先处理
+// 待决事件），玩家点下按钮立刻能在编年史顶部看到为什么没生效。
+// 返回 true 表示当前确有待决事件（调用方据此 saveState 后返回）。
+export function notePendingEventBlock(state: GameState): boolean {
+  const c = state.character;
+  if (!c || !c.pendingEvent) return false;
+  pushLog(state, c.lifeNo, "hint", `有待决事件未处理：先处理待决事件「${c.pendingEvent.title}」，了结之后再做这件事。`);
+  return true;
 }
 
 // ---------- U-608 细时钟推进（全游戏唯一的时间推进口） ----------
@@ -996,6 +1127,303 @@ export function craftLevelFor(c: Character, kind: string): number {
 export function craftYieldPctOf(c: Character, kind: string): number {
   return craftYieldPctFor(kind, craftLevelFor(c, kind));
 }
+
+// ---------- U-612 功法熟练度层（Q38）/ U-626 层数 ----------
+// 每门已学功法带总点数（0 起）与精通标记，存于 character.tech-
+// Progress（键 = 功法 id）；层数与层内点由总点数派生（content.ts
+// 的 techLayerBreakdown：总点数 = 总层数 × 每层点数，攒满即修满
+// 全部层数 = 精通/圆满）。增长三路——「用」：斗法施展（resolve-
+// Fight 结算尾）与修炼结算计入施展（doSimpleAction 的 cultivate
+// 分支），同一动作内同一功法只结算一次（两个结算点各自每次调用
+// 只走一遍本函数）；「练」：在家练习属 U-470/U-613，本项只在结
+// 算层预留 "practice" 来源与配置表 practiceGain，练习动作本身
+// 不在本项新造，U-470 落地时调用本函数即可挂接。精通档（U-470
+// 口径）：修满全部层数即自动置 mastered，此后该功法的有效修炼
+// 加成 = 基础 bonusPct + 配置步长（沿用功法既有 bonusPct 档位
+// 阶梯 15/20/25 上升一档，不另起数值体系），结算点只有修炼一处
+// （actions-play 的 cultivate 分支经 techEffectiveBonusPctOf 读
+// 数），功法本身数值一字不动。
+
+// U-626 旧存档换算：0–100 熟练度 prof → 该功法总点数（prof/100
+// × 总点数，向下取整到点）；已精通的恒为修满（总点数）。总点
+// 数为 null（无限层）时无从按比例换算——防护兜底：prof 原值作
+// 点数（不除以无限量、不崩溃；本项无无限层功法，此路不实际触
+// 发）。techProgressOf（即时读取）与 migrateTechProgressLayers
+// （读档落盘迁移）共用此一处换算，口径恒一致。
+export function legacyProfToPoints(tech: TechDef, prof: number, mastered: boolean): number {
+  const total = techTotalPoints(tech);
+  if (total === null) return Math.max(0, Math.floor(prof));
+  if (mastered) return total;
+  const p = typeof prof === "number" && Number.isFinite(prof) && prof > 0 ? prof : 0;
+  return Math.min(total, Math.floor(Math.min(p, 100) / 100 * total));
+}
+
+// 某门功法的进度（存档字段 techProgress，缺键/坏值 = 0 点、未
+// 精通，与计划口径「旧存档默认 0」一致）。U-626：新存档读
+// points；只有旧 prof 的条目按 legacyProfToPoints 即时换算（读
+// 档迁移会把存档本身改写成新形态，此处是任何绕过迁移的读取路
+// 径的兜底）。relearned（U-086 本世重学标记）原样带出，供涨幅
+// 加成与展示读取。
+export function techProgressOf(c: Character, techniqueId: string): TechProgressEntry {
+  const v = c.techProgress?.[techniqueId];
+  const mastered = !!v?.mastered;
+  let points: number;
+  if (v && typeof v.points === "number" && Number.isFinite(v.points)) {
+    points = Math.max(0, Math.floor(v.points));
+    const tech = techById(techniqueId);
+    const total = tech ? techTotalPoints(tech) : null;
+    if (total !== null) points = Math.min(points, total);
+    if (mastered && total !== null) points = total;
+  } else if (v && typeof v.prof === "number") {
+    const tech = techById(techniqueId);
+    points = tech ? legacyProfToPoints(tech, v.prof, mastered) : 0;
+  } else {
+    points = 0;
+  }
+  const out: TechProgressEntry = { points, mastered };
+  if (v?.relearned) out.relearned = true;
+  // U-614：重学印记快照原样带出（坏值/缺失按 t=100 收敛，与旧存
+  // 档口径一致）；无 relearned 时快照无意义、不带出。
+  if (v?.relearned) out.relearnImprint = clampImprint(typeof v.relearnImprint === "number" ? v.relearnImprint : 100);
+  return out;
+}
+
+// U-626 读档迁移（loadState 调用）：把当前角色 techProgress 里
+// 仍带旧 prof 的条目按比例换算改写为 points 形态（prof 字段删
+// 除，此后存档恒为新形态）；已是新形态的条目一字不动（幂等，
+// 反复读档不重复换算）。图鉴条目与印记 t 不在此列、一字不动。
+// 导入存档同样经 loadState，故导入的旧存档走同一条迁移。
+export function migrateTechProgressLayers(state: GameState): void {
+  const c = state.character;
+  if (!c?.techProgress) return;
+  for (const [id, v] of Object.entries(c.techProgress)) {
+    if (!v || typeof v !== "object") continue;
+    if (typeof v.points === "number" && Number.isFinite(v.points)) continue;
+    if (typeof v.prof !== "number") continue;
+    const tech = techById(id);
+    if (!tech) continue;
+    const conv = techProgressOf(c, id);
+    const next: TechProgressEntry = { points: conv.points, mastered: conv.mastered };
+    if (conv.relearned) { next.relearned = true; next.relearnImprint = conv.relearnImprint; }
+    c.techProgress[id] = next;
+  }
+}
+
+// ---------- U-614 精通印记强度：读取口 ----------
+// 图鉴条目的有效印记强度 t：未精通过的条目没有印记——其重学待
+// 遇恒按 t=100（满）取值（与 U-086 固定口径一致，印记只约束曾
+// 精通过的功法）；曾精通条目的 imprint 缺失（旧存档）= 100、坏
+// 值/越界由 clampImprint 收敛。全部印记读取都经此口。
+export function codexImprintOf(entry: KnowledgeCodexEntry | undefined | null): number {
+  if (!entry?.mastered) return 100;
+  return clampImprint(typeof entry.imprint === "number" ? entry.imprint : 100);
+}
+// 印记深浅的展示名（纯呈现分段、与待遇换算无关）：图鉴页与结算
+// 页据此给印记配徽记与深浅格，玩家看深浅即知待遇强弱，待遇数
+// 值本身另由 imprintValuesFor 换算明示。
+export function imprintLabelFor(t: number): string {
+  const c = clampImprint(t);
+  if (c >= 100) return "印记完满";
+  if (c >= 70) return "印记深厚";
+  if (c >= 40) return "印记渐淡";
+  if (c > 0) return "印记微光";
+  return "印记只余微光";
+}
+// 印记强度的展示文本：整数原样、半数（衰减 (100−p)/2 可得 .5）
+// 保留一位小数，避免日志/页面出现浮点长尾。
+export function imprintTextFor(t: number): string {
+  const c = clampImprint(t);
+  return Number.isInteger(c) ? String(c) : c.toFixed(1);
+}
+// 某门功法按图鉴当前 t 的重学待遇（印记强度 / 起始总点数 / 起
+// 始占比% / 涨幅加成%）：图鉴无此条目时返回 null（初学、无待
+// 遇）。U-626：起始点数按该功法总点数换算（imprintValuesFor）。
+export function codexRelearnValues(state: GameState, techniqueId: string): { imprint: number; startPoints: number; startRatioPct: number; gainBonusPct: number } | null {
+  const entry = state.knowledgeCodex?.[techniqueId];
+  if (!entry) return null;
+  const tech = techById(techniqueId);
+  if (!tech) return null;
+  const imprint = codexImprintOf(entry);
+  return { imprint, ...imprintValuesFor(imprint, tech) };
+}
+
+// ---------- U-086 知识图鉴：收录 / 重学 / 回填 ----------
+// 学会一门功法的统一收录口（签到赐法、残页掉落、轮回赎回、U-614
+// 免费带走四条学功法路径在落定 techniqueId 后都调本函数）：
+// - 图鉴里还没有这门：新收录 { mastered: false }，返回 relearned
+//   = false（初学，无重学加成）；
+// - 图鉴里已有（前世学过）：本世算重学——按图鉴该功法的当前印
+//   记强度 t 换算起始熟练度（imprintValuesFor），并在本世进度条
+//   目上打 relearned 标记 + 锁定印记快照 relearnImprint，此后本
+//   世涨幅按该 t 换算的加成结算（gainTechniqueProficiency）。图
+//   鉴里的精通记录与印记不动（曾精通与否、印记深浅都是历史事
+//   实，重学不改写；印记只在轮回结算时衰减/回满）。返回
+//   relearned = true 并带本次待遇（印记 t / 起始 / 涨幅），日志
+//   据此明示。
+// 本世内重复调用（如同一门被两条路径先后「学会」——功法槽单门
+// 口径下正常流程不会发生）以已有进度为准、不重置熟练度，待遇
+// 按已有进度条目的印记快照回报。
+// ---------- U-627 无灵根硬分流 ----------
+// 无灵根（roots.json 的 noroot）：天生感应不到灵气——只能学体
+// 修类功法，引气类（法修）功法的每条获取途径都在服务端拦截并
+// 明示「无灵根，无法引气」；修炼改走炼体（actions-play 的
+// cultivate 分支按体魄驱动）。非无灵根角色两类功法皆可学、本
+// 助手恒返回 false、不受影响。判定只读 rootId 一处，各入口共用。
+export function isNoRoot(c: Character): boolean {
+  return c.rootId === NO_ROOT_ID;
+}
+// 该角色此刻能否学这门功法：仅「无灵根 + 法修（引气类）」被拦。
+export function techniqueBlockedByNoRoot(c: Character, tech: TechDef): boolean {
+  return isNoRoot(c) && tech.kind === "法修";
+}
+// 无灵根开局自带起步功法：创建/轮回降生落定角色后调用——功法
+// 槽空着时把凡阶体修《凡骨锻体篇》设为修习中并经统一收录口入
+// 知识图鉴（与其它学功法路径同口径）；槽已被带走的体修功法占
+// 据时不动（带走优先）。返回是否发放（日志由调用方按场景记）。
+export function grantNoRootStarterTechnique(state: GameState, c: Character): boolean {
+  if (!isNoRoot(c) || c.techniqueId) return false;
+  const tech = techById(NO_ROOT_STARTER_TECH_ID);
+  if (!tech) return false;
+  c.techniqueId = tech.id;
+  recordTechniqueLearned(state, c, tech.id);
+  return true;
+}
+
+export interface RelearnInfo {
+  relearned: boolean; imprint: number; startPoints: number; startRatioPct: number; gainBonusPct: number;
+}
+export function recordTechniqueLearned(state: GameState, c: Character, techniqueId: string): RelearnInfo {
+  if (!state.knowledgeCodex) state.knowledgeCodex = {};
+  const tech = techById(techniqueId);
+  const fallback: RelearnInfo = { relearned: false, imprint: 100, startPoints: 0, startRatioPct: 0, gainBonusPct: 0 };
+  if (!tech) return fallback;
+  const existing = state.knowledgeCodex[techniqueId];
+  if (!existing) {
+    state.knowledgeCodex[techniqueId] = { mastered: false };
+    return { relearned: false, imprint: 100, ...imprintValuesFor(100, tech) };
+  }
+  const values = codexRelearnValues(state, techniqueId) ?? { imprint: 100, ...imprintValuesFor(100, tech) };
+  if (!c.techProgress) c.techProgress = {};
+  if (!c.techProgress[techniqueId]) {
+    c.techProgress[techniqueId] = { points: values.startPoints, mastered: false, relearned: true, relearnImprint: values.imprint };
+  } else {
+    // 已有进度：待遇按既有印记快照回报（不重置、不改印记）。
+    const snap = techProgressOf(c, techniqueId);
+    const imprint = snap.relearnImprint ?? values.imprint;
+    return { relearned: !!snap.relearned, imprint, ...imprintValuesFor(imprint, tech) };
+  }
+  return { relearned: true, imprint: values.imprint, startPoints: values.startPoints, startRatioPct: values.startRatioPct, gainBonusPct: values.gainBonusPct };
+}
+
+// 旧存档回填（loadState 读档期调用，与签到图鉴并入兜底同口径）：
+// 图鉴字段是 U-086 新增的，老存档里当前角色已经学过、甚至已经
+// 精通的功法不在图鉴里——把当前修习功法（techniqueId）与
+// techProgress 里留有记录的功法并入图鉴，精通标记按本世进度取
+// （已精通 = true）。只补记录、不发任何加成（本世进度一字不
+// 动，重学加成只对「后世重新学到」生效）；往世学过的功法在旧
+// 存档里没有任何留存字段（轮回树只记功法名号文本、不记 id），
+// 无从追溯，不回填。
+export function backfillKnowledgeCodex(state: GameState): void {
+  const c = state.character;
+  if (!c) return;
+  if (!state.knowledgeCodex) state.knowledgeCodex = {};
+  const ids = new Set<string>();
+  if (c.techniqueId) ids.add(c.techniqueId);
+  if (c.techProgress) for (const id of Object.keys(c.techProgress)) ids.add(id);
+  for (const id of ids) {
+    if (!techById(id)) continue;
+    const mastered = techProgressOf(c, id).mastered;
+    const entry = state.knowledgeCodex[id];
+    // U-614：回填的新精通条目带满印记（imprint 100，与「无印记
+    // 字段 = t 100」的旧存档口径一致）；已有条目的印记一字不动
+    // （衰减只在轮回结算时发生，读档回填不动印记）。
+    if (!entry) state.knowledgeCodex[id] = mastered ? { mastered, imprint: 100 } : { mastered };
+    else if (mastered && !entry.mastered) { entry.mastered = true; entry.imprint = 100; }
+  }
+}
+
+// 一门功法在当前角色身上的有效修炼加成%：未精通 = 功法基础
+// bonusPct；已精通 = 基础 + 配置表精通档步长（上升一档）。
+export function techEffectiveBonusPctOf(c: Character, tech: TechDef): number {
+  return tech.bonusPct + (techProgressOf(c, tech.id).mastered ? TECHNIQUE_MASTERY.masteryBonusStepPct : 0);
+}
+
+export interface TechProfGainResult {
+  techniqueId: string; name: string;
+  // U-626：点数口径——gained 本次到账点数、before/after 结算前后
+  // 总点数；layerBefore/layerAfter 为结算前后的所在层（升层日志
+  // 与修炼日志附注据此）；totalPoints 为该功法总点数（无限层为
+  // null）。
+  gained: number; before: number; after: number;
+  layerBefore: number; layerAfter: number; totalPoints: number | null;
+  masteredNow: boolean; mastered: boolean;
+  bonusBefore: number; bonusAfter: number;
+  // U-086：本次结算的基础涨幅（配置表）与是否吃了图鉴重学加成
+  // （gained 为加成后的实际到账，日志据此明示）。
+  // U-614：relearnGainBonusPct 为本世印记快照换算的涨幅加成%
+  // （未重学时为 0）。
+  baseGain: number; relearned: boolean; relearnGainBonusPct: number;
+}
+
+// 给当前修习功法结算一次攒点（来源决定涨幅，查配置表）：未习
+// 功法返回 null（未学功法不受影响）；涨幅封顶到该功法总点数
+// （无限层不封顶）；攒满一层记一条升层日志（「修至第 N 层」），
+// 修满全部层数自动进精通档并单独记一条编年史明示。每个结算点
+// 每次动作只调用一次，杜绝同一动作重复刷。
+export function gainTechniqueProficiency(state: GameState, source: TechniqueProfSource): TechProfGainResult | null {
+  const c = state.character;
+  if (!c) return null;
+  const tech = techById(c.techniqueId);
+  if (!tech) return null;
+  const cur = techProgressOf(c, tech.id);
+  // U-086：本世重学的功法（图鉴在册）涨幅带一小个加成倍率——
+  // 实际涨幅 = round(基础涨幅 × (1 + 加成%/100))，最低 1；初学
+  // 按基础涨幅原样结算。U-614：加成% 按本世重学时锁定的印记强
+  // 度快照（cur.relearnImprint，缺失按 t=100）换算。
+  const baseGain = techniqueProfGainFor(source);
+  const relearnValues = imprintValuesFor(cur.relearnImprint ?? 100, tech);
+  const gain = cur.relearned
+    ? Math.max(1, Math.round(baseGain * (1 + relearnValues.gainBonusPct / 100)))
+    : baseGain;
+  const totalPoints = techTotalPoints(tech);
+  const after = totalPoints === null ? cur.points + gain : Math.min(totalPoints, cur.points + gain);
+  const masteredNow = !cur.mastered && totalPoints !== null && after >= totalPoints;
+  const mastered = cur.mastered || masteredNow;
+  if (!c.techProgress) c.techProgress = {};
+  const entry: TechProgressEntry = { points: after, mastered };
+  if (cur.relearned) { entry.relearned = true; entry.relearnImprint = clampImprint(cur.relearnImprint ?? 100); }
+  c.techProgress[tech.id] = entry;
+  const layerBefore = techLayerBreakdown(tech, cur.points).layer;
+  const layerAfter = techLayerBreakdown(tech, after).layer;
+  // U-086：臻至精通当刻同步进知识图鉴的精通记录（图鉴条目缺失
+  // 时补建——正常流程学会当刻已收录，此处只兜底）。U-614：精
+  // 通当刻印记即回满（t=100）——结算时的回满判定与此一致
+  // （buildReincarnation 按本世精通与否统一结算印记）。
+  if (masteredNow) {
+    if (!state.knowledgeCodex) state.knowledgeCodex = {};
+    const codexEntry = state.knowledgeCodex[tech.id];
+    if (!codexEntry) state.knowledgeCodex[tech.id] = { mastered: true, imprint: 100 };
+    else { codexEntry.mastered = true; codexEntry.imprint = 100; }
+  }
+  const result: TechProfGainResult = {
+    techniqueId: tech.id, name: tech.name,
+    gained: after - cur.points, before: cur.points, after,
+    layerBefore, layerAfter, totalPoints,
+    masteredNow, mastered,
+    bonusBefore: tech.bonusPct + (cur.mastered ? TECHNIQUE_MASTERY.masteryBonusStepPct : 0),
+    bonusAfter: tech.bonusPct + (mastered ? TECHNIQUE_MASTERY.masteryBonusStepPct : 0),
+    baseGain, relearned: !!cur.relearned, relearnGainBonusPct: cur.relearned ? relearnValues.gainBonusPct : 0,
+  };
+  // U-626：升层日志——攒满一层（所在层推进）即记一条；同一次攒
+  // 点若径直修满精通，精通专条已含圆满之意，不再叠记升层条。
+  if (!masteredNow && layerAfter > layerBefore) {
+    pushLog(state, c.lifeNo, "technique", `《${tech.name}》修至第 ${layerAfter} 层——层数精进，离修满${tech.layers !== null ? `全部 ${tech.layers} 层` : "诸层"}又近一步。`);
+  }
+  if (masteredNow) {
+    pushLog(state, c.lifeNo, "technique", `《${tech.name}》修满全部 ${tech.layers ?? 0} 层，臻至精通（圆满）！多年施展参悟终成圆熟——此功法的修炼加成自 +${result.bonusBefore}% 提升至 +${result.bonusAfter}%（精通档：沿功法加成档位上升一档）。精通之名已录入知识图鉴，轮回不灭。`);
+  }
+  return result;
+}
 // ---------- U-619 炼制本命法宝双门槛 ----------
 // 开炉炼制某阶法宝须同时满足两项（数值出自配置表 forge.json 的
 // minCraftLevel / minRealm，加载自检把关）：炼器熟练度等级（U-482
@@ -1223,6 +1651,11 @@ export function resolveFight(state: GameState, c: Character, enemy: EnemyDef): v
       }
     }
   }
+  // U-612：斗法即施展——当前修习功法在本场斗法中施展一次，熟练
+  // 度按配置表 combatGain 增长（胜负都算施展；resolveFight 每次
+  // 斗法动作只结算一遍，同一动作内不重复刷）。臻至精通的明示由
+  // gainTechniqueProficiency 记编年史。
+  gainTechniqueProficiency(state, "combat");
   bumpGroupCount(c);
   // U-608：斗法耗时按细时钟配置表（fight，草稿 1 月）。
   advanceActionMonths(state, "fight");
@@ -1402,8 +1835,8 @@ export function timedObjectiveText(def: TimedEventDef): string {
   return `在「${locName}」${verb} ${def.objective.need} 回`;
 }
 
-// 声望四段的一句人话（板面明示：接与不接、成与败各自动多少声望，
-// 与配置表逐项一致，玩家接帖前就看得见代价）。
+// 声望结算的一句人话（板面明示：接、成、败各自动多少声望，与配
+// 置表逐项一致，玩家接帖前就看得见代价；过期不接不动声望）。
 export function timedRepText(def: TimedEventDef): string {
   const fmt = (d: TimedRepDelta) => {
     const ps: string[] = [];
@@ -1411,7 +1844,9 @@ export function timedRepText(def: TimedEventDef): string {
     if (d.sect) ps.push(`宗门声望 ${d.sect > 0 ? "+" : ""}${d.sect}`);
     return ps.join("、") || "声望不变";
   };
-  return `接帖 ${fmt(def.rep.accept)} · 办成 ${fmt(def.rep.success)} · 超时/撕帖 ${fmt(def.rep.fail)} · 过期不接 ${fmt(def.rep.ignore)}`;
+  // 2026-11-18 自测修复：过期不接已不结算声望，文案如实写「声望
+  // 不变」，不再引用配置表 rep.ignore（该段数值自此不生效）。
+  return `接帖 ${fmt(def.rep.accept)} · 办成 ${fmt(def.rep.success)} · 超时/撕帖 ${fmt(def.rep.fail)} · 过期不接 声望不变`;
 }
 
 // U-610 旧存档时钟迁移（读档时调用，见 loadState，须在 settleTim-
@@ -1459,7 +1894,8 @@ export function migrateTimedClock(state: GameState): void {
 // 到期结算（读档时调用，见 loadState）：按当前天序把两类到期一次
 // 结清——① 已接未办妥且天序已到截止天序的限时帖：超时失败，结
 // 算「败」段声望、失败数 +1；② 板上挂满 postDays 天无人接取的
-// 帖子：过期沉底，结算「不接」段声望、过期数 +1。目标已达成的已
+// 帖子：过期沉底、过期数 +1，但不结算任何声望、不结仇，且本世
+// 不再重挂（2026-11-18 自测修复：未接取不被动受罚）。目标已达成的已
 // 接帖不受时限约束（限时管的是「办妥」，交帖领赏随时）。角色已
 // 陨落时不结算：本世限时帖随轮回清空，不跨世追罚。结算不掷骰、
 // 不改任何既有系统数值；结果随本次读档之后任一动作的存档持久化
@@ -1486,17 +1922,22 @@ export function settleTimedEvents(state: GameState): void {
     if (nowDay < p.postedDay + def.postDays) continue;
     ts.board = ts.board.filter((x) => x !== p);
     ts.lapsedCount += 1;
-    const rep = applyReputation(state, c, def.issuerNpc, def.rep.ignore);
-    const issuer = npcById(def.issuerNpc);
-    pushLog(state, c.lifeNo, "timed", `⌛ 帖子过期：「${def.title}」在告示处挂了 ${timedDaysText(def.postDays)} 无人接，帖子沉了底——${issuer ? `${issuer.name}等得心凉` : "没人再提这事"}（${rep}；本世过期帖 ${ts.lapsedCount} 张）。`);
+    // 2026-11-18 自测修复：未接取的帖子过期只沉底作罢——不结算
+    // 「不接」声望、不结仇（玩家没接过的帖，过期不该被动受罚）；
+    // 过期帖记入 lapsedIds，本世不再重新挂出（ensureTimedBoard
+    // 据此排除）。已接帖的超时失败口径不变（上方 active 分支）。
+    if (!ts.lapsedIds) ts.lapsedIds = [];
+    if (!ts.lapsedIds.includes(p.id)) ts.lapsedIds.push(p.id);
+    pushLog(state, c.lifeNo, "timed", `⌛ 帖子过期：「${def.title}」在告示处挂了 ${timedDaysText(def.postDays)} 无人接，帖子沉了底——没接的帖过期便作罢，不扣声望、不结仇，此帖本世不再重挂（本世过期帖 ${ts.lapsedCount} 张）。`);
   }
 }
 
 // 板面补齐：把挂帖数补到配置表 boardSize——候选 = 当前未挂帖、未
 // 接取、且张贴处与目标地点都已解锁（境界够得着）的限时帖，种子
 // 化抽取，挂帖时记下当前天序 postedDay（过期从此起算）。接走的
-// 帖子在接取期间不再挂；办妥/失败/过期后回到池中，日后可再贴
-// （限时营生常有常新，与委托板回池口径一致）。读档（loadState）
+// 帖子在接取期间不再挂；办妥/失败后回到池中，日后可再贴（限时
+// 营生常有常新，与委托板回池口径一致）；唯独过期沉底的帖子本世
+// 不再重挂（lapsedIds，2026-11-18 自测修复）。读档（loadState）
 // 与降生时调用：补齐只增不改已挂帖子，随机序号走 rngSeq。
 export function ensureTimedBoard(state: GameState): void {
   const c = state.character;
@@ -1505,8 +1946,11 @@ export function ensureTimedBoard(state: GameState): void {
   const size = TIMED_EVENTS.boardSize;
   if (ts.board.length >= size) return;
   const taken = new Set<string>([...ts.board.map((p) => p.id), ...ts.active.map((a) => a.id)]);
+  const lapsed = new Set<string>(ts.lapsedIds ?? []);
   const pool = TIMED_EVENTS.postings.filter((d) => {
     if (taken.has(d.id)) return false;
+    // 2026-11-18 自测修复：本世已过期的帖子不再重新挂出。
+    if (lapsed.has(d.id)) return false;
     const boardLoc = locById(d.boardLocationId);
     const targetLoc = locById(d.locationId);
     return !!boardLoc && !!targetLoc && locUnlocked(c, boardLoc) && locUnlocked(c, targetLoc);
@@ -1728,9 +2172,20 @@ export function settleSignInHere(state: GameState, viaTravel = false): boolean {
     gained = `得${formatEffectGains(r.effect)}`;
   } else if (r.kind === "technique") {
     const t = techById(r.techniqueId);
-    if (!c.techniqueId && t) {
+    // U-627：无灵根硬分流——签到功法是引气类时学不了，明示原因
+    // 并按既有 fallback 折作参悟结算（奖励不落空、口径与槽位已
+    // 占时一致）。
+    if (t && techniqueBlockedByNoRoot(c, t)) {
+      applyEffects(state, r.fallback);
+      gained = `无灵根，无法引气——功法「${t.name}」是引气类功法，你天生感应不到灵气，学不了；此番签到折作参悟：${formatEffectGains(r.fallback)}`;
+    } else if (!c.techniqueId && t) {
       c.techniqueId = t.id;
-      gained = `学会功法「${t.name}」（${t.desc}）`;
+      // U-086：学会当刻收录知识图鉴；图鉴已有此功法 = 重学，起
+      // 始熟练度与涨幅加成由 recordTechniqueLearned 落定，文案明示。
+      const learnInfo = recordTechniqueLearned(state, c, t.id);
+      gained = learnInfo.relearned
+        ? `重学功法「${t.name}」（${t.desc}）——此功法已载于知识图鉴，前世参悟犹在：本世自${techLayerText(t, learnInfo.startPoints)}起步、增长 +${learnInfo.gainBonusPct}%（精通印记·${imprintLabelFor(learnInfo.imprint)}，强度 ${imprintTextFor(learnInfo.imprint)}/100）`
+        : `学会功法「${t.name}」（${t.desc}），已录入知识图鉴——学会即永久解锁，轮回不清空`;
     } else {
       applyEffects(state, r.fallback);
       gained = `已在修习功法，不再另学——此番签到折作参悟：${formatEffectGains(r.fallback)}`;
@@ -1837,7 +2292,8 @@ export function maybeFindSealedEgg(state: GameState): boolean {
 // ---------- U-396 按地点排布事件掉落：功法残页结算 ----------
 
 // 探索事件掉落结算（chooseOption 的牌堆事件主分支在成败结算之后、
-// 成功时调用，见 actions-play）：当前地点在掉落表里有一行时，按
+// 成功时调用，见 actions-play；U-399 修正后安静一步分支同样独立
+// 调用本掷——探索附带钩子每次探索都掷、不受密度命中与否影响）：当前地点在掉落表里有一行时，按
 // 配置 chancePct 种子化掷一次掉落判定（种子 op drop:page）——这
 // 一掷在事件结算之外，不改事件的触发概率、难度与成败收益。命中
 // 即得该地点定死的功法残页，结算复用既有功法字段（与 U-391 签
@@ -1860,9 +2316,21 @@ export function maybeDropTechniquePage(state: GameState): boolean {
   if (!tech) return false;
   const td = dropTierDef(drop.tier);
   const locName = locById(c.locationId)?.name ?? c.locationId;
+  // U-627：无灵根硬分流——残页是引气类功法时学不了，明示原因
+  // 并按所在品质档 fallback 折作参悟（与槽位已占口径一致）。
+  if (techniqueBlockedByNoRoot(c, tech)) {
+    applyEffects(state, td.fallback);
+    pushLog(state, c.lifeNo, "treasure", `📜 地点掉落 · 功法残页：在「${locName}」的际遇余烬里，你拾得一页${td.label}功法残页——「${tech.name}」的失传篇页（${tech.desc}）。无灵根，无法引气：这门引气类功法你天生感应不到灵气、学不了，残页只得折作参悟：${formatEffectGains(td.fallback)}（此地掉落${td.label}残页，掉落表见地图页「地点掉落」）。`);
+    return true;
+  }
   if (!c.techniqueId) {
     c.techniqueId = tech.id;
-    pushLog(state, c.lifeNo, "treasure", `📜 地点掉落 · 功法残页：在「${locName}」的际遇余烬里，你拾得一页${td.label}功法残页——正是「${tech.name}」的失传篇页（${tech.desc}）残页入手、就地参悟，你学会了这门功法（此地掉落${td.label}残页，掉落表见地图页「地点掉落」）。`);
+    // U-086：学会当刻收录知识图鉴；图鉴已有 = 重学（起始熟练度
+    // 与涨幅加成由 recordTechniqueLearned 落定，日志明示）。
+    const learnInfo = recordTechniqueLearned(state, c, tech.id);
+    pushLog(state, c.lifeNo, "treasure", learnInfo.relearned
+      ? `📜 地点掉落 · 功法残页：在「${locName}」的际遇余烬里，你拾得一页${td.label}功法残页——正是「${tech.name}」的失传篇页（${tech.desc}）。这门功法已载于知识图鉴，前世参悟犹在：重学入手，本世自${techLayerText(tech, learnInfo.startPoints)}起步、增长 +${learnInfo.gainBonusPct}%（精通印记·${imprintLabelFor(learnInfo.imprint)}，强度 ${imprintTextFor(learnInfo.imprint)}/100；此地掉落${td.label}残页，掉落表见地图页「地点掉落」）。`
+      : `📜 地点掉落 · 功法残页：在「${locName}」的际遇余烬里，你拾得一页${td.label}功法残页——正是「${tech.name}」的失传篇页（${tech.desc}）残页入手、就地参悟，你学会了这门功法，并录入知识图鉴——学会即永久解锁，轮回不清空（此地掉落${td.label}残页，掉落表见地图页「地点掉落」）。`);
   } else {
     applyEffects(state, td.fallback);
     const same = c.techniqueId === tech.id;
@@ -1874,7 +2342,7 @@ export function maybeDropTechniquePage(state: GameState): boolean {
 // ---------- U-464 探索拾矿 ----------
 
 // 际遇办妥之后（与 U-396 功法残页掉落并列的一掷，独立种子流 drop:ore、
-// 互不干扰）：按配置表 forge.json 的 dropChancePct 掷一次，命中则按
+// 互不干扰；U-399 修正后安静一步分支同样独立调用本掷）：按配置表 forge.json 的 dropChancePct 掷一次，命中则按
 // 各阶 dropWeight 加权拾得一块矿石入 ores——矿石的两条来源之一（另
 // 一条是坊市购买），不凭空发放：没命中就什么都不发生。阶位不看地点
 // （矿脉无处不在、高阶权重低），拾得只记持有数，不占任何格子。返
@@ -1890,10 +2358,96 @@ export function maybeDropOre(state: GameState): boolean {
   return true;
 }
 
+// ---------- U-399 隐藏要素：埋点剩余与隐藏发现 ----------
+
+// 本世某地点还剩几处隐藏要素可发现：存档字段 hiddenSlots 缺该地
+// 点键时（字段整表缺失已由注册表补默认，此为单键兜底）按配置表
+// 默认值计；配置表也无此地点（未知地点）时为 0。
+export function hiddenSlotsLeft(c: Character, locationId: string): number {
+  const v = c.hiddenSlots?.[locationId];
+  if (typeof v === "number" && Number.isFinite(v)) return Math.max(0, Math.floor(v));
+  return exploreTuningFor(locationId)?.hiddenSlots ?? 0;
+}
+
+// 路线「事件」节点摆事件之前的一掷（chooseRouteNode 调用，独立种
+// 子流 explore:hidden）：当前地点仍有剩余埋点时，按配置表
+// explore-tuning.json 的 hiddenChancePct 掷一次——掷中则扣减 1 个
+// 埋点、改为触发一次隐藏发现：奖励从既有奖励类型里按地点品阶
+// （U-396 掉落档位 low/mid/high）加权取一样落袋——灵石 / 修为 /
+// 参悟（该档 fallback）/ 矿石（一块，阶位权重同拾矿）/ 本地点功
+// 法残页（结算与 U-396 同口径：功法槽空着学会、无灵根学引气类
+// 或槽已占时折作参悟），日志明示「隐藏发现」与剩余埋点数。无剩
+// 余埋点时不掷骰、不留痕（与封印之蛋同口径）；未掷中则走普通事
+// 件，事件的触发、难度与结算一字未动。灵石/修为量按品阶给：
+// 下品 18/22、中品 30/38、上品 48/60，与际遇成败收益（副职成
+// 功 25–55、残页参悟 20/40/65）同量级。返回是否触发了隐藏发现。
+export function maybeHiddenDiscovery(state: GameState): boolean {
+  const c = state.character;
+  if (!c || c.dead) return false;
+  const left = hiddenSlotsLeft(c, c.locationId);
+  if (left <= 0) return false;
+  if (!rngForNext(state, "explore:hidden").chance(EXPLORE_TUNING.hiddenChancePct / 100)) return false;
+  if (!c.hiddenSlots) c.hiddenSlots = defaultHiddenSlots();
+  c.hiddenSlots[c.locationId] = left - 1;
+  const locName = locById(c.locationId)?.name ?? c.locationId;
+  const drop = locationDropAt(c.locationId);
+  const minRealm = locById(c.locationId)?.minRealm ?? 0;
+  const tier = drop?.tier ?? (minRealm >= 3 ? "high" : minRealm >= 1 ? "mid" : "low");
+  const td = dropTierDef(tier);
+  const restNote = left - 1 > 0 ? `（「${locName}」的隐藏要素还剩 ${left - 1} 处）` : `（「${locName}」的隐藏要素至此探尽）`;
+  const kind = weighted(rngForNext(state, "explore:hidden-kind"), [
+    { value: "stones", commonality: 3 },
+    { value: "cult", commonality: 3 },
+    { value: "insight", commonality: 2 },
+    { value: "ore", commonality: 2 },
+    ...(drop ? [{ value: "page", commonality: 2 }] : []),
+  ]);
+  if (kind === "stones") {
+    const eff: Effect = { stones: tier === "low" ? 18 : tier === "mid" ? 30 : 48 };
+    applyEffects(state, eff);
+    pushLog(state, c.lifeNo, "treasure", `🔍 隐藏发现：在「${locName}」一处不起眼的石缝深处，你摸到前人藏下的一小袋灵石——${formatEffectGains(eff)}。${restNote}`);
+  } else if (kind === "cult") {
+    const eff: Effect = { cult: tier === "low" ? 22 : tier === "mid" ? 38 : 60 };
+    applyEffects(state, eff);
+    pushLog(state, c.lifeNo, "treasure", `🔍 隐藏发现：在「${locName}」的僻静处，你寻见一汪不为人知的灵泉，就地汲饮炼化——${formatEffectGains(eff)}。${restNote}`);
+  } else if (kind === "ore") {
+    const oreTier = weighted(rngForNext(state, "explore:hidden-ore"), FORGE.tiers.map((t) => ({ value: t, commonality: t.dropWeight })));
+    c.ores[oreTier.id] = oreCountFor(c, oreTier.id) + 1;
+    pushLog(state, c.lifeNo, "treasure", `🔍 隐藏发现：在「${locName}」的岩层裂隙里，你敲出一块${oreTier.tier}阶矿石「${oreTier.name}」（现有 ${c.ores[oreTier.id]} 块）——可去修炼宗门页的锻造台以此锻造法宝，或留着待用。${restNote}`);
+  } else if (kind === "page" && drop) {
+    const tech = techById(drop.techniqueId);
+    if (!tech) {
+      // 防御：残页功法引用已由加载自检保证存在，万一缺失折作参悟、奖励不落空。
+      applyEffects(state, td.fallback);
+      pushLog(state, c.lifeNo, "treasure", `🔍 隐藏发现：在「${locName}」的断壁残垣间，你发现前人刻下的半篇手记，就地参悟——${formatEffectGains(td.fallback)}。${restNote}`);
+    } else if (techniqueBlockedByNoRoot(c, tech)) {
+      applyEffects(state, td.fallback);
+      pushLog(state, c.lifeNo, "treasure", `🔍 隐藏发现：在「${locName}」的隐秘处，你寻见一页${td.label}功法残页——「${tech.name}」的失传篇页（${tech.desc}）。无灵根，无法引气：这门引气类功法你天生感应不到灵气、学不了，残页只得折作参悟：${formatEffectGains(td.fallback)}。${restNote}`);
+    } else if (!c.techniqueId) {
+      c.techniqueId = tech.id;
+      // U-086：学会当刻收录知识图鉴；图鉴已有 = 重学（与 U-396 残页同一收录口）。
+      const learnInfo = recordTechniqueLearned(state, c, tech.id);
+      pushLog(state, c.lifeNo, "treasure", learnInfo.relearned
+        ? `🔍 隐藏发现：在「${locName}」的隐秘处，你寻见一页${td.label}功法残页——正是「${tech.name}」的失传篇页（${tech.desc}）。这门功法已载于知识图鉴，前世参悟犹在：重学入手，本世自${techLayerText(tech, learnInfo.startPoints)}起步、增长 +${learnInfo.gainBonusPct}%（精通印记·${imprintLabelFor(learnInfo.imprint)}，强度 ${imprintTextFor(learnInfo.imprint)}/100）。${restNote}`
+        : `🔍 隐藏发现：在「${locName}」的隐秘处，你寻见一页${td.label}功法残页——正是「${tech.name}」的失传篇页（${tech.desc}）残页入手、就地参悟，你学会了这门功法，并录入知识图鉴——学会即永久解锁，轮回不清空。${restNote}`);
+    } else {
+      applyEffects(state, td.fallback);
+      const same = c.techniqueId === tech.id;
+      pushLog(state, c.lifeNo, "treasure", `🔍 隐藏发现：在「${locName}」的隐秘处，你寻见一页${td.label}功法残页——「${tech.name}」的失传篇页。${same ? "这门功法你已在修习，同页对照、别有会心，残页化作参悟" : "你已在修习功法，残页不再另学，折作参悟"}：${formatEffectGains(td.fallback)}。${restNote}`);
+    }
+  } else {
+    // insight 参悟：前人手记就地参悟，按地点品阶档的 fallback 结算（与残页折作参悟同源）。
+    applyEffects(state, td.fallback);
+    pushLog(state, c.lifeNo, "treasure", `🔍 隐藏发现：在「${locName}」的断壁残垣间，你发现前人刻下的半篇手记，就地参悟——${formatEffectGains(td.fallback)}。${restNote}`);
+  }
+  return true;
+}
+
 // ---------- U-620 探索事件掉落法宝 ----------
 
 // 际遇办妥之后（与 U-396 功法残页、U-464 矿石并列的一掷，独立种
-// 子流 drop:artifact，与前两掷互不干扰）：按配置表 artifact-
+// 子流 drop:artifact，与前两掷互不干扰；U-399 修正后安静一步分
+// 支同样独立调用本掷）：按配置表 artifact-
 // sources.json 的 exploreDrop.chancePct 掷一次，命中则按池中权重
 // 从同一 28 件法宝池里抽一件——不凭空发宝：没命中什么都不发生。
 // 赋予走 settleArtifactGrant 统一口径（槽空认主、U-618 门槛封
@@ -1913,4 +2467,146 @@ export function maybeDropArtifact(state: GameState): boolean {
   const locName = locById(c.locationId)?.name ?? c.locationId;
   pushLog(state, c.lifeNo, "treasure", `🗡️ 探索掉落 · 法宝：在「${locName}」的际遇余烬里，一件无主法宝应着你的气机微微震颤——${artifactGrantOutcomeText(state, c, def.id, outcome, drop.occupiedFallback)}。`);
   return true;
+}
+
+// ---------- U-401 秘境探索：固定掉落槽与隐藏 Boss ----------
+
+// 前置事件触发标记：某事件被摆成待决事件时调用（actions-play 的
+// presentDrawnEvent）——若它正是某处秘境的专属前置事件且玩家正
+// 站在该秘境，本世该秘境的 Boss 就此被惊动（bossReady），此后探
+// 索该秘境时 Boss 才可能现身。前置未触发时本函数不动任何状态，
+// Boss 现身判定（maybeSecretRealmBoss）也就永不掷骰——这是「前
+// 置未触发 Boss 不现身」的代码路径保证。重复触发不重复记日志。
+export function noteSecretRealmPrelude(state: GameState, eventId: string): void {
+  const c = state.character;
+  if (!c || c.dead) return;
+  const def = SECRET_REALMS.realms.find((r) => r.preludeEventId === eventId && r.locationId === c.locationId);
+  if (!def) return;
+  const st = secretRealmStateOf(c, def.locationId);
+  if (st.bossReady || st.bossDefeated) return;
+  st.bossReady = true;
+  const locName = locById(def.locationId)?.name ?? def.locationId;
+  pushLog(state, c.lifeNo, "event", `👁️ 秘境前置：这桩际遇惊动了「${locName}」深处沉睡的存在——「${def.boss.name}」已被惊醒。此后在「${locName}」探索时，它随时可能现身；打赢它，传承点与该档法宝都是你的。`);
+}
+
+// 典籍槽结算：保底学会一门该界品阶（配置 techGrade）当前未学的
+// 功法——「未学」以知识图鉴未收录且非当前修习为准，按功法池顺
+// 序取第一门。学会走统一收录口（recordTechniqueLearned），并把
+// 它设为当前修习功法（原在修习的功法进度保留在 techProgress、
+// 图鉴不灭，日后可再学回）。两种折点情形都在日志明示：该品阶
+// 已全部学会；无灵根角色该品阶候选全是引气类（U-627 硬分流，
+// 学不了）——折给配置的 techFallbackLegacyPoints 点传承点。
+function grantSecretRealmTechnique(state: GameState, c: Character, def: SecretRealmDef): void {
+  const locName = locById(def.locationId)?.name ?? def.locationId;
+  const codex = state.knowledgeCodex ?? {};
+  const candidates = TECHNIQUES.filter((t) => t.grade === def.techGrade && t.id !== c.techniqueId && !codex[t.id]);
+  const learnable = candidates.filter((t) => !techniqueBlockedByNoRoot(c, t));
+  const tech = learnable[0];
+  if (!tech) {
+    c.legacyPoints += SECRET_REALMS.techFallbackLegacyPoints;
+    const reason = candidates.length === 0
+      ? `这一界的${def.techGrade}阶功法你已尽数习得，典籍无字可传`
+      : `无灵根，无法引气：这一界的${def.techGrade}阶未学功法皆是引气类，你天生感应不到灵气、学不了`;
+    pushLog(state, c.lifeNo, "treasure", `📖 秘境典籍 · 失传典籍：在「${locName}」的秘藏深处，你寻见这一界的失传典籍——${reason}，典籍的灵光转而凝成传承点 +${SECRET_REALMS.techFallbackLegacyPoints}。`);
+    return;
+  }
+  const prev = techById(c.techniqueId);
+  c.techniqueId = tech.id;
+  const learnInfo = recordTechniqueLearned(state, c, tech.id);
+  pushLog(state, c.lifeNo, "treasure", `📖 秘境典籍 · 失传典籍：在「${locName}」的秘藏深处，你寻见失传的${def.techGrade}阶功法「${tech.name}」——${tech.desc}就地参悟，你学会了这门功法，并录入知识图鉴${prev && prev.id !== tech.id ? `（原先修习的《${prev.name}》进度保留在图鉴与记录里，日后可再学回）` : ""}${learnInfo.relearned ? `；这门功法已载于知识图鉴，前世参悟犹在：重学入手，本世自${techLayerText(tech, learnInfo.startPoints)}起步、增长 +${learnInfo.gainBonusPct}%` : ""}。本世这一界的典籍槽就此领空，轮回后重置。`);
+}
+
+// 固定掉落槽触发（探索动作在寻仇/遗藏等优先支之后、密度/路线之
+// 前调用，独立种子流 realm:pill / realm:tech）：身处秘境且该槽
+// 本世未领时，按配置 slotChancePct 逐槽（先丹药、后典籍）各掷
+// 一次——命中即领、该槽本世为空，本次探索就此结算（替代普通事
+// 件触发，不再踏路线）；两槽都已领空或都没掷中时返回 false，探
+// 索照旧走密度/路线流程。非秘境地点不掷骰、不留痕。
+export function maybeSecretRealmSlot(state: GameState): boolean {
+  const c = state.character;
+  if (!c || c.dead) return false;
+  const def = secretRealmAt(c.locationId);
+  if (!def) return false;
+  const st = secretRealmStateOf(c, def.locationId);
+  const locName = locById(def.locationId)?.name ?? def.locationId;
+  if (!st.pillClaimed && rngForNext(state, "realm:pill").chance(SECRET_REALMS.slotChancePct / 100)) {
+    st.pillClaimed = true;
+    const item = SHOP[def.pillId];
+    c.pills[def.pillId] += def.pillCount;
+    pushLog(state, c.lifeNo, "treasure", `💊 秘境丹药 · 稀有丹药：在「${locName}」的秘藏深处，你寻见这一界秘藏的丹药——「${item.name}」×${def.pillCount}（${item.desc}），已收入丹药囊。本世这一界的丹药槽就此领空，轮回后重置。`);
+    return true;
+  }
+  if (!st.techClaimed && rngForNext(state, "realm:tech").chance(SECRET_REALMS.slotChancePct / 100)) {
+    st.techClaimed = true;
+    grantSecretRealmTechnique(state, c, def);
+    return true;
+  }
+  return false;
+}
+
+// Boss 的斗法敌手形态：tier/might 出自配置表，难度走既有
+// combatDc 口径（resolveFight 内部查表），与普通敌手同一条链。
+export function secretRealmBossEnemy(def: SecretRealmDef): EnemyDef {
+  return { id: def.boss.id, name: def.boss.name, desc: def.boss.intro, tier: def.boss.tier, might: def.boss.might, locations: [def.locationId] };
+}
+
+// 隐藏 Boss 现身判定（探索动作在槽位判定之前调用，独立种子流
+// realm:boss）：本世前置已触发（bossReady）且 Boss 未被击败时，
+// 按配置 bossChancePct 掷一次——命中则摆成待决事件「迎战 / 暂
+// 避」；前置未触发时直接返回 false、不掷骰（Boss 绝不现身）。
+// 暂避不清空任何状态，Boss 仍会在后续探索里再来；打赢才置
+// bossDefeated、本世槽空（结算见 settleSecretRealmBossFight）。
+export function maybeSecretRealmBoss(state: GameState): boolean {
+  const c = state.character;
+  if (!c || c.dead || c.pendingEvent) return false;
+  const def = secretRealmAt(c.locationId);
+  if (!def) return false;
+  const st = secretRealmStateOf(c, def.locationId);
+  if (!st.bossReady || st.bossDefeated) return false;
+  if (!rngForNext(state, "realm:boss").chance(SECRET_REALMS.bossChancePct / 100)) return false;
+  const enemy = secretRealmBossEnemy(def);
+  c.pendingEvent = {
+    id: `realmboss:${def.locationId}`, title: `秘境之主 · ${def.boss.name}`, art: def.locationId,
+    desc: `${def.boss.intro}（秘境之主现身：打赢得传承点 +${def.boss.legacyPoints} 与一件该档法宝；败北按斗法败北结算，伤好之后还能再战；暂避不罚，它仍会再来。）`,
+    options: [
+      { label: "迎战秘境之主", hint: "斗法检定 · 胜负按既有斗法口径结算", attr: "might", dc: combatDc(enemy) },
+      { label: "暂避锋芒", hint: "就此退去 · 它仍会在此地等你", attr: "fortune", dc: 0 },
+    ],
+  };
+  pushLog(state, c.lifeNo, "event", `🐉 秘境之主现身：「${def.boss.name}」拦住了你的去路——前置际遇惊动的存在，到底还是找上门来了。`);
+  return true;
+}
+
+// Boss 战结算（chooseOption 的 realmboss 分支选「迎战」时调用）：
+// 战斗本体走既有单次掷骰斗法链 resolveFight（Q34 斗法 d20、胜势
+// 奖惩、败北伤势、致死与遁逃法宝口径全与普通斗法一致，本函数不
+// 另造规则）。打赢（resolveFight 的 lastRoll 为胜且未陨落）→ 本
+// 世 Boss 槽置空，发放固定大奖：传承点（配置 legacyPoints）+
+// 一件该档（artifactMinRealm）未持有的法宝（池顺序种子抽一，赋
+// 予走 settleArtifactGrant 统一口径——槽空认主、U-618 门槛对
+// 齐；该档法宝已全持有时按配置 occupiedFallback 折作灵石并明
+// 示）。败北不置空，养好伤还能再战。
+export function settleSecretRealmBossFight(state: GameState, def: SecretRealmDef): void {
+  const c = state.character;
+  if (!c || c.dead) return;
+  const enemy = secretRealmBossEnemy(def);
+  resolveFight(state, c, enemy);
+  const won = !c.dead && c.lastRoll?.success === true && c.lastRoll.label === `斗法·${enemy.name}`;
+  if (!won) return;
+  const st = secretRealmStateOf(c, def.locationId);
+  st.bossDefeated = true;
+  c.legacyPoints += def.boss.legacyPoints;
+  const locName = locById(def.locationId)?.name ?? def.locationId;
+  const candidates = ARTIFACTS.filter((a) => a.minRealm === def.boss.artifactMinRealm && a.id !== c.artifactId);
+  let artifactNote: string;
+  if (candidates.length === 0) {
+    applyEffects(state, def.boss.occupiedFallback);
+    artifactNote = `这一档的法宝你已尽数持有，无合适法宝可赐，折作${formatEffectGains(def.boss.occupiedFallback)}`;
+  } else {
+    const pickDef = weighted(rngForNext(state, "realm:boss-artifact"), uniformTable(candidates));
+    const outcome = pickDef ? settleArtifactGrant(state, c, pickDef.id, def.boss.occupiedFallback) : null;
+    artifactNote = pickDef && outcome ? artifactGrantOutcomeText(state, c, pickDef.id, outcome, def.boss.occupiedFallback) : `折作${formatEffectGains(def.boss.occupiedFallback)}`;
+    if (!outcome) applyEffects(state, def.boss.occupiedFallback);
+  }
+  pushLog(state, c.lifeNo, "fight", `🏆 秘境之主败落：你在「${locName}」击败了「${def.boss.name}」！固定大奖到账：传承点 +${def.boss.legacyPoints}；${artifactNote}。本世这一界的 Boss 槽就此领空，轮回后重置。`);
 }

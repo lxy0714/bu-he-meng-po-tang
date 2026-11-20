@@ -14,12 +14,16 @@ import templeImg from "./assets/temple.webp";
 import wildsImg from "./assets/wilds.webp";
 import iceImg from "./assets/ice.webp";
 import fallsImg from "./assets/falls.webp";
+import sunkenImg from "./assets/sunken.webp";
+import penglaiImg from "./assets/penglai.webp";
+import underworldImg from "./assets/underworld.webp";
 
-export { arenaImg, caveImg, demonpassImg, fallsImg, fieldImg, heroImg, iceImg, marketImg, portraitImg, realmImg, templeImg, tribulationImg, villageImg, wildsImg };
+export { arenaImg, caveImg, demonpassImg, fallsImg, fieldImg, heroImg, iceImg, marketImg, penglaiImg, portraitImg, realmImg, sunkenImg, templeImg, tribulationImg, underworldImg, villageImg, wildsImg };
 
 // ---------- static display data (mirrors server game data) ----------
 
 export const ROOTS = [
+  { id: "noroot", name: "无灵根", desc: "天生感应不到灵气，引气无门，唯有炼体入道。", stats: "战力10 · 神识5 · 机缘15 · 体魄20" },
   { id: "waste", name: "废灵根", desc: "灵根驳杂近乎于无，修炼极慢，机缘奇高。", stats: "战力8 · 神识10 · 机缘22 · 体魄12" },
   { id: "gold", name: "金灵根", desc: "锋锐无匹，剑修的好苗子。", stats: "战力20 · 神识10 · 机缘10 · 体魄13" },
   { id: "wood", name: "木灵根", desc: "生机绵长，体魄强健，最耐熬。", stats: "战力11 · 神识12 · 机缘11 · 体魄20" },
@@ -61,12 +65,15 @@ export const KEEPSAKE_ARTIFACTS = [
   { id: "tribulation_umbrella", name: "混元渡劫伞", icon: "伞", desc: "走火入魔 50% 被挡下" },
   { id: "reincarnation_disk", name: "六道轮回盘", icon: "轮", desc: "轮回结算传承点/轮回点 +1" },
 ];
+// 遗藏选项：cult/stones 是埋藏时须真实封入并当场扣除的自有资源
+// （与服务端 treasures.json 的取回 effect 等值，埋多少取回多少）；
+// 服务端 buryTreasure 按同一数值校验与扣除，此处仅供展示与禁用。
 export const TREASURE_OPTIONS = [
-  { id: "tr_pillbox", name: "丹匣", icon: "丹", desc: "埋给后世：取回得修为 +60" },
-  { id: "tr_coffer", name: "灵石宝匣", icon: "匣", desc: "埋给后世：取回得灵石 +80" },
-  { id: "tr_herbbox", name: "百草囊", icon: "草", desc: "埋给后世：取回得修为 +35、灵石 +40" },
-  { id: "tr_scroll", name: "功法残卷匣", icon: "卷", desc: "埋给后世：取回得修为 +90" },
-  { id: "tr_jadecase", name: "灵玉宝匣", icon: "玉", desc: "埋给后世：取回得灵石 +140" },
+  { id: "tr_pillbox", name: "丹匣", icon: "丹", desc: "埋给后世：取回得修为 +60", cult: 60, stones: 0 },
+  { id: "tr_coffer", name: "灵石宝匣", icon: "匣", desc: "埋给后世：取回得灵石 +80", cult: 0, stones: 80 },
+  { id: "tr_herbbox", name: "百草囊", icon: "草", desc: "埋给后世：取回得修为 +35、灵石 +40", cult: 35, stones: 40 },
+  { id: "tr_scroll", name: "功法残卷匣", icon: "卷", desc: "埋给后世：取回得修为 +90", cult: 90, stones: 0 },
+  { id: "tr_jadecase", name: "灵玉宝匣", icon: "玉", desc: "埋给后世：取回得灵石 +140", cult: 0, stones: 140 },
 ];
 export const LOCATIONS = [
   { id: "sect", name: "青云山门", img: heroImg, desc: "灵气充沛 · 修炼+6" },
@@ -81,11 +88,15 @@ export const LOCATIONS = [
   { id: "wilds", name: "万兽山脉", img: wildsImg, desc: "猎兽采药 · 需筑基 · 高危" },
   { id: "border", name: "北境雪原", img: iceImg, desc: "冰灵之地 · 需筑基" },
   { id: "falls", name: "天河飞瀑", img: fallsImg, desc: "瀑下炼体 · 修炼+3" },
+  { id: "sunken", name: "沉沙古城", img: sunkenImg, desc: "人间秘境 · 秘藏丹药/黄阶典籍/尸王" },
+  { id: "penglai", name: "蓬莱洞天", img: penglaiImg, desc: "洞天福地 · 需筑基 · 秘藏丹药/玄阶典籍/守阙仙灵" },
+  { id: "underworld", name: "黄泉鬼域", img: underworldImg, desc: "地府秘境 · 需元婴 · 秘藏丹药/地阶典籍/鬼将" },
 ];
 export const ART_BY_KEY: Record<string, string> = {
   sect: heroImg, market: marketImg, realm: realmImg, village: villageImg,
   tribulation: tribulationImg, cave: caveImg, fields: fieldImg, arena: arenaImg, demonfront: demonpassImg,
   temple: templeImg, wilds: wildsImg, ice: iceImg, falls: fallsImg,
+  sunken: sunkenImg, penglai: penglaiImg, underworld: underworldImg,
 };
 export const TIER_STYLE: Record<string, string> = {
   gold: "bg-[var(--gold)] text-white",

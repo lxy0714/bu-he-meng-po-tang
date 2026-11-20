@@ -2,14 +2,30 @@
 // 下一世。从 actions.ts 原样拆分，规则未动。
 
 import { defineAction, z } from "./platform";
-import { ARTIFACTS, CURRENT_EVENT_VERSION, EVENT_PACKS, EVENT_RELEASES, NAME_POOL, REINCARNATION_POINTS, ROOTS, TALENTS, TIME_COSTS, birthBoonById, destinyById, locById, talentById, treasureById } from "./data";
+import { ARTIFACTS, CURRENT_EVENT_VERSION, EVENT_PACKS, EVENT_RELEASES, NAME_POOL, NO_ROOT_ID, REINCARNATION_POINTS, ROOTS, TALENTS, TIME_COSTS, birthBoonById, defaultHiddenSlots, destinyById, locById, talentById, techById, techLayerText, treasureById } from "./data";
 import {
-applyBirthBoons, applyBirthBoost, applyCultivationLevels, applyTalentsOnCreate, artifactGate, grantArtifact, grantShards, loadState, pushLog, realmText,
-emptyCommissionState, emptyDailyState, emptySignInState, emptyTimedEventState, ensureCommissionBoard, ensureDailyBoard, ensureTimedBoard, realmsFor, rngForNext, saveState, shuffledEventDeck, weekKeyOf, type BirthBoost, type Character,
+applyBirthBoons, applyBirthBoost, applyCultivationLevels, applyTalentsOnCreate, artifactGate, defaultSecretRealmStates, grantArtifact, grantNoRootStarterTechnique, grantShards, imprintLabelFor, imprintTextFor, loadState, pushLog, realmText, recordTechniqueLearned, emptyCommissionState, emptyDailyState, emptySignInState, emptyTimedEventState, ensureCommissionBoard, ensureDailyBoard, ensureTimedBoard, realmsFor, rngForNext, saveState, shuffledEventDeck, weekKeyOf, type BirthBoost, type Character
 } from "./state";
 import { applyDestiny, buildReincarnation, drawThree, makeBirthDraw, makeFragments, resolveChoice, rollRatedTalents } from "./reincarnation";
+import type { GameState } from "./state";
 import { randomSet, uniformTable, weighted } from "./rng";
 import { stateResponse, toResponse, type StateResponse } from "./respond";
+
+// U-627：下一世的有效灵根 id 预览——与 reincarnate 的落定口径一
+// 致（Q2 设计树锁定优先，否则取降生抽选的当前值；resolveChoice
+// 对候选池内的值原样返回，故预览与最终落定相同）。结算期拦截
+// 「无灵根下一世带走引气功法」用。
+function nextLifeRootId(state: GameState): string {
+  const q2v = state.settings.q2.value;
+  if (q2v === "waste_root") return "waste";
+  if (q2v === "reborn") return "heaven";
+  return state.birthDraw?.root.value ?? "";
+}
+// 下一世为无灵根且目标功法是引气类（法修）时为真：赎回/免费带
+// 走都不可选（候选下发已过滤，服务端在此同步拦截并明示）。
+function noRootBlocksTechnique(state: GameState, techniqueId: string): boolean {
+  return nextLifeRootId(state) === NO_ROOT_ID && techById(techniqueId)?.kind === "法修";
+}
 
 export const lifeActions = {
 
@@ -141,7 +157,13 @@ export const lifeActions = {
         dailyCommissions: emptyDailyState(),
         signIns: emptySignInState(),
         craftUses: {},
+        // U-612：功法熟练度本世起算（每门 0 起、未精通）。
+        techProgress: {},
         ores: {},
+        // U-399：隐藏要素埋点本世起算（每地点按配置表 hiddenSlots 满额）。
+        hiddenSlots: defaultHiddenSlots(),
+        // U-401：秘境固定掉落槽本世起算（三界各一份，全未领）。
+        secretRealms: defaultSecretRealmStates(),
         relations: [], pills: { heal: 0, cult: 0, brk: 0 }, caveLevel: 0, breakBonus: 0,
       };
       applyDestiny(c, drawnDestinyId);
@@ -174,6 +196,11 @@ export const lifeActions = {
         pushLog(state, c.lifeNo, "birth", `${c.name} 出生于山下凡村，${c.origin}。测灵根时石碑毫无反应——废灵根。但没人知道，他脑海深处封着一世记忆。${artifactNote}${talentNote}${destinyNote}`);
       } else {
         pushLog(state, c.lifeNo, "birth", `${c.name} 出生于山下凡村，${c.origin}，${c.rootName}，${startArtifact ? artifactNote : "赤手空拳踏上仙途——本命法宝，要等第一世死后从所得中挑。"}${talentNote}${destinyNote}`);
+      }
+      // U-627：无灵根开局自带凡阶体修《凡骨锻体篇》（修习中 +
+      // 图鉴同步收录，走统一收录口）；非无灵根角色恒不触发。
+      if (grantNoRootStarterTechnique(state, c)) {
+        pushLog(state, c.lifeNo, "birth", `天生无灵根，感应不到灵气、引气无门——好在自幼打熬筋骨，开局自带凡阶体修功法《凡骨锻体篇》（已录入知识图鉴）：往后修炼改走炼体，修为全凭体魄锤炼，引气类功法这一世学不了。`);
       }
       if (boostNote) pushLog(state, c.lifeNo, "birth", boostNote);
       if (boonNote) pushLog(state, c.lifeNo, "birth", boonNote);
@@ -223,18 +250,69 @@ export const lifeActions = {
       // U-618：候选被门槛锁定（本世止步境界未达该宝使用门槛）时不可
       // 点选带走——客户端已禁用，此处服务端同步拦截，不结算。
       if (cand.locked) return toResponse(state);
+      // U-614：已免费带走的那一门不得再走传承点赎回——客户端下发
+      // 时已从赎回候选过滤，此处服务端同步拦截，不结算。
+      if (args.kind === "technique" && re.freeTechniqueId && re.freeTechniqueId === args.id) return toResponse(state);
       const existingIdx = re.keepsakes.findIndex((k) => k.kind === args.kind && k.id === args.id);
       if (existingIdx >= 0) { re.keepsakes.splice(existingIdx, 1); await saveState(ctx, state); return toResponse(state); }
+      // U-627：下一世为无灵根时引气类功法不可赎回带走——候选下
+      // 发已过滤，此处服务端同步拦截并记一条明示日志（取消已选
+      // 走上方 toggle、不受此限）。
+      if (args.kind === "technique" && noRootBlocksTechnique(state, args.id)) {
+        pushLog(state, c.lifeNo, "technique", `无灵根，无法引气：下一世天生无灵根、感应不到灵气——引气类功法「${cand.name}」不可赎回带走，无灵根只能带走体修类功法。`);
+        await saveState(ctx, state);
+        return toResponse(state);
+      }
       // U-618：法宝类只许赎回本世实际持有的那一件——候选池口径
       // （buildReincarnation）的服务端兜底，本世没持有过的法宝点选
       // 一律不结算（取消已选的走上方 toggle，不受此限）。
       if (args.kind === "artifact" && c.artifactId !== args.id) return toResponse(state);
+      // 2026-11-18 自测修复：功法类同口径兜底——只许赎回本世实际
+      // 学过的那门（techniqueId），未学过的功法点选一律不结算。
+      if (args.kind === "technique" && c.techniqueId !== args.id) return toResponse(state);
       if (args.kind === "artifact") re.keepsakes = re.keepsakes.filter((k) => k.kind !== "artifact");
       if (args.kind === "technique") re.keepsakes = re.keepsakes.filter((k) => k.kind !== "technique");
       if (args.kind === "treasure" && !args.locationId) return toResponse(state);
       const keptCost = re.keepsakes.reduce((sum, k) => sum + (re.keepsakeCandidates.find((x) => x.kind === k.kind && x.id === k.id)?.cost ?? 0), 0);
       if (keptCost + cand.cost > c.legacyPoints + re.legacyEarned) return toResponse(state);
       re.keepsakes.push({ kind: args.kind, id: args.id, locationId: args.locationId });
+      await saveState(ctx, state);
+      return toResponse(state);
+    },
+  }),
+
+  selectFreeTechnique: defineAction({
+    description: "轮回结算（U-614）：从知识图鉴曾精通功法里自选一门免费带走（不花传承点、限一门）；再点同一门取消、点另一门改选，传空串清空。已选的那一门同时退出传承点赎回（若此前已赎回选中则自动取消赎回、传承点不扣）。候选与待遇在结算生成时按印记衰减结算后的图鉴快照为准。",
+    request: z.object({ techniqueId: z.string().max(40) }),
+    response: stateResponse,
+    async handler(ctx, args): Promise<StateResponse> {
+      const state = await loadState(ctx);
+      const c = state.character;
+      const re = state.reincarnation;
+      if (!c || !c.dead || !re) return toResponse(state);
+      const candidates = re.freeTechniqueCandidates ?? [];
+      if (!args.techniqueId) {
+        if (re.freeTechniqueId) { re.freeTechniqueId = null; await saveState(ctx, state); }
+        return toResponse(state);
+      }
+      const cand = candidates.find((f) => f.id === args.techniqueId);
+      if (!cand) return toResponse(state);
+      // U-627：下一世为无灵根时引气类功法不可免费带走——候选下
+      // 发已过滤，此处服务端同步拦截并记一条明示日志。
+      if (noRootBlocksTechnique(state, args.techniqueId)) {
+        pushLog(state, c.lifeNo, "technique", `无灵根，无法引气：下一世天生无灵根、感应不到灵气——引气类功法「${cand.name}」不可免费带走，无灵根只能带走体修类功法。`);
+        await saveState(ctx, state);
+        return toResponse(state);
+      }
+      if (re.freeTechniqueId === args.techniqueId) {
+        // 再点同一门 = 取消免费带走（赎回候选随下发过滤自动恢复）。
+        re.freeTechniqueId = null;
+      } else {
+        re.freeTechniqueId = args.techniqueId;
+        // 同一门若已在传承点赎回里选中，免费带走优先：摘掉赎回
+        // 选中（keptCost 按 keepsakes 现算，摘掉即不扣传承点）。
+        re.keepsakes = re.keepsakes.filter((k) => !(k.kind === "technique" && k.id === args.techniqueId));
+      }
       await saveState(ctx, state);
       return toResponse(state);
     },
@@ -258,11 +336,32 @@ export const lifeActions = {
       // Q12：死于走火入魔 = 魂飞魄散，赎回的本命法宝也碎裂，不带走。
       const artifact = !re.artifactShattered && artifactKeep ? (ARTIFACTS.find((a) => a.id === artifactKeep.id) ?? null) : null;
       const techniqueKeep = re.keepsakes.find((k) => k.kind === "technique");
+      // U-614：免费带走的那一门（候选快照里查得到才算数）与赎回
+      // 功法互斥（selectFreeTechnique 已保证不同时选中同一门）；
+      // 功法槽只有一门，免费带走优先落槽。
+      const freeCand = re.freeTechniqueId ? (re.freeTechniqueCandidates ?? []).find((f) => f.id === re.freeTechniqueId) ?? null : null;
+      const carryTechniqueId = freeCand?.id ?? techniqueKeep?.id ?? null;
+      // U-627 兜底：下一世落定为无灵根而带走的是引气类功法时，
+      // 带走不生效（无灵根，无法引气）——赎回的那门退还其传承点
+      // 价（下方 legacyPoints 加回），免费带走的那门直接作罢。
+      // 结算期候选过滤与点选拦截已先行，此处只兜「先选功法、后
+      // 改灵根」等顺序交错；判定与拦截同源（noRootBlocksTechnique）。
+      const carryBlockedByNoRoot = !!carryTechniqueId && noRootBlocksTechnique(state, carryTechniqueId);
+      const effectiveCarryId = carryBlockedByNoRoot ? null : carryTechniqueId;
+      const carryRefund = carryBlockedByNoRoot && techniqueKeep?.id === carryTechniqueId
+        ? (re.keepsakeCandidates.find((x) => x.kind === "technique" && x.id === carryTechniqueId)?.cost ?? 0)
+        : 0;
+      const keptNames = [
+        ...re.keepsakes
+          .filter((k) => !(carryBlockedByNoRoot && k.kind === "technique" && k.id === carryTechniqueId))
+          .map((k) => re.keepsakeCandidates.find((x) => x.kind === k.kind && x.id === k.id)?.name ?? k.id),
+        ...(freeCand && !carryBlockedByNoRoot ? [`${freeCand.name}（图鉴免费带走）`] : []),
+      ];
       state.lives.push({
         lifeNo: c.lifeNo, name: c.name, realmText: realmText(c, state.settings), age: c.age,
         cause: c.deathCause ?? "陨落", grade: re.grade,
         artifactName: c.artifactName,
-        keepsakes: re.keepsakes.map((k) => re.keepsakeCandidates.find((x) => x.kind === k.kind && x.id === k.id)?.name ?? k.id),
+        keepsakes: keptNames,
         talents: [...c.talentIds],
       });
       const frags = makeFragments(state, c, re.memoryKept);
@@ -317,8 +416,8 @@ export const lifeActions = {
         sealedMemory: !memoryKept || state.settings.q2.value === "waste_root",
         memoryTier: memoryKept ? c.lifeNo : c.memoryTier,
         dead: false, deathCause: null, pendingEvent: null, lastRoll: null, route: null,
-        talentIds: nextTalents, techniqueId: techniqueKeep?.id ?? null,
-        legacyPoints: c.legacyPoints + re.legacyEarned - keptCost,
+        talentIds: nextTalents, techniqueId: effectiveCarryId,
+        legacyPoints: c.legacyPoints + re.legacyEarned - keptCost + carryRefund,
         jadeLayers: c.jadeLayers,
         weekKey: weekKeyOf(new Date()), groupCounts: {}, caveClaimedLife: 0,
         destinyId: "", sectRankId: "", sectContrib: 0,
@@ -332,9 +431,29 @@ export const lifeActions = {
         dailyCommissions: emptyDailyState(),
         signIns: emptySignInState(),
         craftUses: {},
+        // U-612：功法熟练度不跨世带走（与副职熟练度同口径）——带
+        // 走的功法在新世不带前世熟练度数值；U-086/U-614：该功法
+        // 已在知识图鉴里（带走的功法前世必然学过、必在图鉴），
+        // 按重学口径（图鉴当前印记 t 换算）落定起始熟练度与涨幅
+        // 加成，见下方 recordTechniqueLearned。
+        techProgress: {},
         ores: {},
+        // U-399：隐藏要素埋点随轮回重置回配置表满额（本世制，不跨世带走剩余数）。
+        hiddenSlots: defaultHiddenSlots(),
+        // U-401：秘境固定掉落槽随轮回重置回全未领（本世制，三界各一份重新可领、Boss 重新可战）。
+        secretRealms: defaultSecretRealmStates(),
         relations: [], pills: { heal: 0, cult: 0, brk: 0 }, caveLevel: 0, breakBonus: 0,
       };
+      // U-086/U-614：带走的功法（传承点赎回或图鉴免费带走）在新
+      // 世即「重学」——它前世学过、知识图鉴必有收录，
+      // recordTechniqueLearned 按图鉴当前印记 t 给起始熟练度并打
+      // 本世重学标记（涨幅加成同按 t 换算）；万一图鉴缺失（极旧
+      // 存档）则在此补收录、按初学处理。播报在降生日志后另记一条。
+      const carryLearnInfo = effectiveCarryId ? recordTechniqueLearned(state, next, effectiveCarryId) : null;
+      // U-627：下一世为无灵根且功法槽空着（没带走体修功法）时，
+      // 与第一世同口径自带凡阶体修《凡骨锻体篇》（修习中 + 图鉴
+      // 收录）；带走的若是体修功法则槽已占、不覆盖。
+      const starterGrantedNext = grantNoRootStarterTechnique(state, next);
       // U-618：赎回带走的法宝走统一赋予入口——新世自炼气起步，未达
       // 该宝门槛时先封存（加成不生效），境界达到门槛后自动解封；
       // 解封/封存的说明在下方降生日志之后另记一条。
@@ -365,12 +484,32 @@ export const lifeActions = {
       ensureDailyBoard(state);
       applyCultivationLevels(state);
       pushLog(state, next.lifeNo, "birth",
-        `第${next.lifeNo}世开启：${next.name}（${next.origin}，${next.rootName}${destiny ? `，命格「${destiny.name}」` : ""}）。本世评级 ${re.grade}，得传承点 ${re.legacyEarned}（余 ${next.legacyPoints}）。${re.memoryNote}保留：${re.keepsakes.length > 0 ? re.keepsakes.map((k) => re.keepsakeCandidates.find((x) => x.kind === k.kind && x.id === k.id)?.name ?? k.id).join("、") : "无"}${re.artifactShattered && artifactKeep ? "（走火入魔魂飞魄散，赎回的法宝已碎裂）" : ""}；继承修为 ${inherited} 点${inheritRate > 0 ? `（前世总修为打折，只留${Math.round(inheritRate * 100)}%）` : ""}，今生起点 ${realmText(next, state.settings)}。`);
-      pushLog(state, next.lifeNo, "birth", `🔄 轮回结算发放轮回点 +${re.pointsEarned}（按 ${re.grade} 级档位），轮回点余 ${state.reincarnationPoints}——只用于开局分配，与传承点不混用。`);
-      if (re.shardPointsEarned > 0) pushLog(state, next.lifeNo, "birth", `🧩 主线轮回点：上一世新集记忆碎片 ${re.shardsThisLife} 枚（前世之谜），按碎片档发放轮回点 +${re.shardPointsEarned}，已与评级发放同池入账（余 ${state.reincarnationPoints}）。`);
+        `第${next.lifeNo}世开启：${next.name}（${next.origin}，${next.rootName}${destiny ? `，命格「${destiny.name}」` : ""}）。本世评级 ${re.grade}，得传承点 ${re.legacyEarned}（余 ${next.legacyPoints}）。${re.memoryNote}保留：${keptNames.join("、") || "无"}${re.artifactShattered && artifactKeep ? "（走火入魔魂飞魄散，赎回的法宝已碎裂）" : ""}；继承修为 ${inherited} 点${inheritRate > 0 ? `（前世总修为打折，只留${Math.round(inheritRate * 100)}%）` : ""}，今生起点 ${realmText(next, state.settings)}。`);
+      // 轮回点发放日志已前移到结算生成当刻（buildReincarnation）：
+      // 那时余额未被开局分配消费，账目自洽（2026-11-18 自测修复）。
       if (boostNote) pushLog(state, next.lifeNo, "birth", boostNote);
       if (boonNote) pushLog(state, next.lifeNo, "birth", boonNote);
       if (artifact && artifactSealed) pushLog(state, next.lifeNo, "birth", `🗡️ 本命法宝「${artifact.name}」随轮回带走，但新世境界未至（需${artifactGate(state, next).minRealmName}境，当前炼气）——法宝封存于身、加成暂不生效，境界达到后自动解封认主。`);
+      // U-627：无灵根带走拦截的降生播报（兜底路径才走到这里：
+      // 结算期已先行过滤/拦截）与起步功法播报。
+      if (carryBlockedByNoRoot && carryTechniqueId) {
+        const blockedName = techById(carryTechniqueId)?.name ?? carryTechniqueId;
+        pushLog(state, next.lifeNo, "birth", `无灵根，无法引气：这一世天生无灵根、感应不到灵气——原定带走的引气类功法「${blockedName}」学不了，未能带入本世${carryRefund > 0 ? `，赎回它的传承点 ${carryRefund} 已退还` : ""}。无灵根只能修习体修类功法。`);
+      }
+      if (starterGrantedNext) {
+        pushLog(state, next.lifeNo, "birth", `天生无灵根，感应不到灵气、引气无门——好在自幼打熬筋骨，开局自带凡阶体修功法《凡骨锻体篇》（已录入知识图鉴）：往后修炼改走炼体，修为全凭体魄锤炼，引气类功法这一世学不了。`);
+      }
+      // U-086/U-614：带走功法的重学播报——图鉴之助在本世如何生效
+      // 写明（待遇按降生当刻图鉴印记 t 换算，与结算候选快照同源：
+      // 结算生成后到降生之间印记不再变化）。
+      if (freeCand && carryLearnInfo?.relearned) {
+        const freeTech = techById(freeCand.id);
+        pushLog(state, next.lifeNo, "birth", `📖 知识图鉴：凭图鉴精通印记免费带走功法「${freeCand.name}」——不花传承点。此番属重学：${imprintLabelFor(carryLearnInfo.imprint)}（强度 ${imprintTextFor(carryLearnInfo.imprint)}/100），本世自${freeTech ? techLayerText(freeTech, carryLearnInfo.startPoints) : "第 1 层"}起步、增长 +${carryLearnInfo.gainBonusPct}%。`);
+      } else if (techniqueKeep && carryLearnInfo?.relearned) {
+        const keptName = re.keepsakeCandidates.find((x) => x.kind === "technique" && x.id === techniqueKeep.id)?.name ?? techniqueKeep.id;
+        const keptTech = techById(techniqueKeep.id);
+        pushLog(state, next.lifeNo, "birth", `📖 知识图鉴：赎回的功法「${keptName}」前世已收录于图鉴，此番属重学——前世参悟犹在，本世自${keptTech ? techLayerText(keptTech, carryLearnInfo.startPoints) : "第 1 层"}起步、增长 +${carryLearnInfo.gainBonusPct}%（精通印记·${imprintLabelFor(carryLearnInfo.imprint)}，强度 ${imprintTextFor(carryLearnInfo.imprint)}/100）。`);
+      }
       // U-394：本世恰好达到解锁世数的外传包在此播报——新包事件已随
       // 本世牌堆建堆加入轮询（建堆过滤在 state.ts shuffledEventDeck）。
       for (const p of EVENT_PACKS.packs) {

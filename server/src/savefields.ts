@@ -21,6 +21,7 @@
 // 完整与迁移正确。
 
 import { ERROR_LOG_SLOT, GAME_SLOT } from "./storage";
+import { SECRET_REALMS, defaultHiddenSlots } from "./content";
 
 export type SaveFieldKind = "string" | "number" | "boolean" | "object" | "array" | "record";
 
@@ -123,6 +124,15 @@ export const SAVE_FIELD_REGISTRY: readonly SaveFieldEntry[] = [
   F(G, "reincarnation.keepsakes[].kind", "string"),
   F(G, "reincarnation.keepsakes[].id", "string"),
   F(G, "reincarnation.keepsakes[].locationId", "string", { optional: true, note: "仅遗藏类有埋藏地点" }),
+  F(G, "reincarnation.freeTechniqueCandidates", "array", { make: () => [], note: "U-614 免费带走候选快照（FreeTechniqueCandidate[]，结算生成时按印记衰减结算后的图鉴 t 生成）；U-614 前已生成的旧结算补空数组、不追溯生成（该次结算无免费带走区）" }),
+  F(G, "reincarnation.freeTechniqueCandidates[].id", "string"),
+  F(G, "reincarnation.freeTechniqueCandidates[].name", "string"),
+  F(G, "reincarnation.freeTechniqueCandidates[].desc", "string"),
+  F(G, "reincarnation.freeTechniqueCandidates[].imprint", "number"),
+  F(G, "reincarnation.freeTechniqueCandidates[].startPoints", "number", { make: () => 0, note: "U-626 带走开局总点数起点（层数口径）；U-626 前的旧快照只有 startProf，整形时按总点数等比例换算（见 respond.ts），本字段缺失补 0 仅作形状兜底、不参与待遇（待遇以降生时图鉴 t 现算为准）" }),
+  F(G, "reincarnation.freeTechniqueCandidates[].startProf", "number", { optional: true, note: "U-614 旧快照的开局熟练度（0–100 口径），U-626 起不再生成，仅作整形换算输入保留登记" }),
+  F(G, "reincarnation.freeTechniqueCandidates[].gainBonusPct", "number"),
+  F(G, "reincarnation.freeTechniqueId", "string", { nullable: true, make: () => null, note: "U-614 已选定的免费带走功法 id（未选为 null）；旧结算补 null" }),
   F(G, "reincarnation.chosenOrigin", "string", { nullable: true }),
   F(G, "reincarnation.memoryKept", "boolean"),
   F(G, "reincarnation.memoryNote", "string"),
@@ -135,6 +145,7 @@ export const SAVE_FIELD_REGISTRY: readonly SaveFieldEntry[] = [
   F(G, "birthBoost", "object", { nullable: true, make: () => null, children: ["might", "sense", "fortune", "body"], note: "U-002 开局属性分配（轮回点分到四维，降生时落到新角色并清空）" }),
   F(G, "birthBoons", "array", { make: () => [], note: "U-021 已购待降生生效的「再战天道」强化项 id 列表（轮回点购入，降生时一次性生效并清空）；旧存档缺失按空列表兜底" }),
   F(G, "signInCodex", "array", { make: () => [], note: "U-392 签到图鉴跨世收录：历世签到过的签到点 id 清单（收集进度），轮回不清空；收录发生在签到结算当刻，loadState 另把本世已签列表并入兜底（覆盖本项上线前已签的旧存档，只补记录不发奖）；旧存档缺失按空列表兜底" }),
+  F(G, "knowledgeCodex", "record", { make: () => ({}), note: "U-086 知识图鉴（跨世，轮回不清零）：键为功法 id、值为固定小形状 {mastered 是否曾精通, imprint 精通印记强度 t（U-614 连续模型，可缺省 = 100）}，条目存在 = 学会过；键为功法 id 故用 record、不下钻核查值形状；收录在学会当刻（recordTechniqueLearned）、精通标记在精通当刻同步，loadState 另把当前角色已学/已精通功法回填兜底（只补记录不发加成）；旧存档缺失补 {}（空图鉴）" }),
   F(G, "sealedEggs", "object", { make: () => ({ found: [], totalFound: 0, clues: [], cluedBuried: [], revealed: null }), children: ["found", "totalFound", "clues", "cluedBuried", "revealed"], note: "U-393 封印之蛋收集（跨世，轮回不清空）：已拾蛋 id 清单 / 累计拾取数 / 已换得的前世遗藏线索（元素为固定小形状 {locationId, locationName, source, text}）/ 已被线索指过的既有遗藏键 / 线索标出的无主遗藏方位（固定小形状 {treasureId, treasureName, locationId, locationName} 或 null），children 登记后不再下钻；旧存档缺失补空状态，拾取在探索动作里按配置概率触发、集齐门槛换线索（只提示地点不发奖励），收集物不进丹药囊" }),
   F(G, "birthDraw", "object", { nullable: true, make: () => null, note: "Q11/Q13 降生抽选（BirthDraw）" }),
   F(G, "birthDraw.origin", "object", { children: ["pool", "value", "random"] }),
@@ -183,11 +194,14 @@ export const SAVE_FIELD_REGISTRY: readonly SaveFieldEntry[] = [
   F(G, "character.deckVersion", "number", { make: () => 1, note: "U-395 本世牌堆的事件投放版本（降生时落定为当时最新投放版本，建堆/抽牌只收投放版本不高于此值的事件）；旧存档缺失补 1（首发批——其当世牌堆本就是在只有首发事件时建的，当世不受后来新批次影响，轮回开新世时推进到最新版本）；仅服务端持久化，不进响应形状（响应侧由 eventReleases.lifeVersion 下发）" }),
   F(G, "character.route", "object", { nullable: true, make: () => null, children: ["layer", "totalLayers", "nodes"], note: "U-381 分叉路线进行状态（RouteState）：当前层 / 总层数 / 本层三节点；节点是固定小形状（type + 可选 enemyId）不再下钻；旧存档缺失补 null（无进行中路线）" }),
   F(G, "character.commissions", "object", { make: () => ({ board: [], active: [], completedCount: 0 }), children: ["board", "active", "completedCount"], note: "U-388 委托板状态（本世）：板上张贴的委托 id 列表 / 已接委托（元素为固定小形状 {id, progress, done}，children 登记后不再下钻）/ 本世已完成数；旧存档缺失补空状态，板面由 loadState 的 ensureCommissionBoard 补齐" }),
-  F(G, "character.timedEvents", "object", { make: () => ({ board: [], active: [], completedCount: 0, failedCount: 0, lapsedCount: 0 }), children: ["board", "active", "completedCount", "failedCount", "lapsedCount"], note: "U-389 限时帖状态（本世）：板上挂帖（元素为固定小形状 {id, postedDay}）/ 已接限时帖（元素为固定小形状 {id, progress, done, deadlineDay}）/ 本世办妥·失败·过期数，children 登记后不再下钻；旧存档缺失补空状态，板面由 loadState 的 ensureTimedBoard 补齐、到期由 settleTimedEvents 在读档时结算；U-610 起时钟改天序（累计月份×每月天数），旧存档的 postedAge/deadlineAge 由 loadState 的 migrateTimedClock 换算" }),
+  F(G, "character.timedEvents", "object", { make: () => ({ board: [], active: [], completedCount: 0, failedCount: 0, lapsedCount: 0, lapsedIds: [] }), children: ["board", "active", "completedCount", "failedCount", "lapsedCount", "lapsedIds"], note: "U-389 限时帖状态（本世）：板上挂帖（元素为固定小形状 {id, postedDay}）/ 已接限时帖（元素为固定小形状 {id, progress, done, deadlineDay}）/ 本世办妥·失败·过期数 / 本世已过期帖 id（lapsedIds），children 登记后不再下钻；旧存档缺失补空状态，板面由 loadState 的 ensureTimedBoard 补齐、到期由 settleTimedEvents 在读档时结算；U-610 起时钟改天序（累计月份×每月天数），旧存档的 postedAge/deadlineAge 由 loadState 的 migrateTimedClock 换算" }),
   F(G, "character.dailyCommissions", "object", { make: () => ({ batchMonth: -1, pending: [], doneIds: [], completedCount: 0 }), children: ["batchMonth", "pending", "doneIds", "completedCount"], note: "U-390 日常委托事件池状态（本世）：本批刷新时的累计月份 batchMonth（-1 = 尚未刷新）/ 本批待办委托 id 列表 / 本批已办妥 id 列表 / 本世已办妥数，children 登记后不再下钻；旧存档缺失补空状态，本批内容由 loadState 的 ensureDailyBoard 按累计月份刷新补齐（未办妥不惩罚）；U-611 起刷新标记由年龄 dayAge 改累计月份 batchMonth，旧存档的 dayAge 由 loadState 的 migrateDailyClock 对齐换算（当前批次保全）" }),
   F(G, "character.signIns", "object", { make: () => ({ done: [], count: 0 }), children: ["done", "count"], note: "U-391 地点签到状态（本世）：已签到的签到点 id 列表 / 本世已签到数，children 登记后不再下钻；旧存档缺失补空状态，触发由旅行抵达尾巴与 loadState 的 settleSignInHere 结算（到达即得、大奖本世每处一次；U-392 起本世再抵达已签地点改发按档小奖、签到记入跨世图鉴 signInCodex）" }),
   F(G, "character.craftUses", "record", { make: () => ({}), note: "U-482 副职使用次数（本世）：键为副职 id（alchemy/forge/farm/fish）、值为本世使用次数，熟练度与等级由配置表 craft-skills.json 派生不另存；键为副职 id 故用 record；旧存档缺失补 {}（四门皆 0 次、熟练度默认 0），轮回不带走（降生构造点给 {}）" }),
+  F(G, "character.techProgress", "record", { make: () => ({}), note: "U-612 功法进度与精通标记（本世）；U-626 改层数口径：键为功法 id、值为固定小形状 {points 总点数, mastered 精通标记}（层数/层内点由总点数派生，总层数在 techniques.json、每层点数/涨幅/精通档步长在 technique-mastery.json）；键为功法 id 故用 record、不下钻核查值形状；旧存档缺失补 {}（全部功法 0 点、未精通，与计划口径「旧存档默认 0」一致），旧存档的 prof（0–100 熟练度）由 loadState 的 migrateTechProgressLayers 按比例换算为 points，轮回不带走（降生构造点给 {}）" }),
   F(G, "character.ores", "record", { make: () => ({}), note: "U-464 锻造矿石持有数（本世）：键为配置表 forge.json 的矿石 id、值为持有块数，缺键 = 0；旧存档缺失补 {}（一无所有——矿石只经坊市购买与探索拾得两条来源，不凭空发放），轮回不带走（降生构造点给 {}）" }),
+  F(G, "character.hiddenSlots", "record", { make: () => defaultHiddenSlots(), note: "U-399 隐藏要素埋点剩余（本世）：键为地点 id、值为本世该地点尚可发现的隐藏要素数，初始值 = 配置表 explore-tuning.json 的 hiddenSlots，触发隐藏发现时扣减 1；旧存档缺失按配置默认值整表补值（本世尚未发现过任何隐藏要素，与新世同口径，不凭空扣减），轮回不带走（降生构造点给配置默认值整表）；键为地点 id 故用 record" }),
+  F(G, "character.secretRealms", "record", { make: () => Object.fromEntries(SECRET_REALMS.realms.map((r) => [r.locationId, { pillClaimed: false, techClaimed: false, bossReady: false, bossDefeated: false }])), note: "U-401 秘境固定掉落槽状态（本世）：键为秘境地点 id、值为固定小形状 {pillClaimed 丹药槽已领, techClaimed 典籍槽已领, bossReady Boss 前置已触发, bossDefeated Boss 已击败}，键为地点 id 故用 record、不下钻核查值形状；旧存档缺失按全未领整表补值（本世尚未领过任何秘境槽，与新世同口径），轮回不带走（降生构造点给全未领初始表）" }),
   F(G, "character.quickPlan", "array", { make: () => [], note: "预设路线步骤" }),
   F(G, "character.quickPlan[].kind", "string"),
   F(G, "character.quickPlan[].count", "number"),

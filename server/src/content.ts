@@ -39,10 +39,13 @@ import sealedEggsJson from "./content/sealed-eggs.json" with { type: "json" };
 import eventPacksJson from "./content/event-packs.json" with { type: "json" };
 import eventReleasesJson from "./content/event-releases.json" with { type: "json" };
 import locationDropsJson from "./content/location-drops.json" with { type: "json" };
+import exploreTuningJson from "./content/explore-tuning.json" with { type: "json" };
 import timeCostsJson from "./content/time-costs.json" with { type: "json" };
 import craftSkillsJson from "./content/craft-skills.json" with { type: "json" };
+import techniqueMasteryJson from "./content/technique-mastery.json" with { type: "json" };
 import forgeJson from "./content/forge.json" with { type: "json" };
 import artifactSourcesJson from "./content/artifact-sources.json" with { type: "json" };
+import secretRealmsJson from "./content/secret-realms.json" with { type: "json" };
 // U-376：事件池不在本文件加载——事件类型/schema/稀有度分档/分桶归属
 // 与五分文件合并都在 events-base.ts（事件组织法的基础文件），本文件
 // 只转发其导出，保持既有 import 路径不变；跨池引用自检仍在下方跑。
@@ -90,7 +93,30 @@ export interface ArtifactFx {
   legacyBonus?: number; pointsBonus?: number;
 }
 export interface ArtifactDef { id: string; name: string; desc: string; legacyCost: number; minRealm: number; fx?: ArtifactFx }
-export interface TechDef { id: string; name: string; desc: string; bonusPct: number; legacyCost: number }
+// U-626 功法品阶（2026-11-18 用户定夺）：五阶凡/黄/玄/地/天，
+// 由低到高；现有 10 门按加成映射——黄 = +15% 五门、玄 = +20% 三
+// 门、地 = +25% 两门，凡/天阶暂无功法（页面分组只显示有功法的品
+// 阶）。layers 为该功法的总层数（逐门可不同，本项按品阶参考值
+// 给：黄 6 / 玄 8 / 地 10）；null = 无限层（字段与校验已预留，本
+// 项不新增无限层功法；一切除以总层数/总点数的计算对 null 有防
+// 护，见 techTotalPoints / techLayerBreakdown）。
+export type TechGrade = "凡" | "黄" | "玄" | "地" | "天";
+export const TECH_GRADES: readonly TechGrade[] = ["凡", "黄", "玄", "地", "天"];
+export function techGradeRank(grade: string): number {
+  const i = (TECH_GRADES as readonly string[]).indexOf(grade);
+  return i >= 0 ? i : 0;
+}
+// U-627 功法类型（2026-11-18 用户定夺）：法修 = 引气类（现有
+// 10 门），体修 = 炼体类（本项新增《凡骨锻体篇》起）。类型只对
+// 无灵根角色构成硬分流：无灵根天生感应不到灵气，只能学体修类
+// 功法；其余角色两类皆可学、不受限。功法页/图鉴以小字标识呈现。
+export type TechKind = "法修" | "体修";
+export interface TechDef { id: string; name: string; desc: string; kind: TechKind; bonusPct: number; legacyCost: number; grade: TechGrade; layers: number | null }
+// U-627 无灵根：灵根池第十一种（roots.json 的 noroot）与无灵根
+// 开局自带的起步功法 id——两处各只在一处维护，创建/轮回降生与
+// 各学习入口的拦截都读这里。
+export const NO_ROOT_ID = "noroot";
+export const NO_ROOT_STARTER_TECH_ID = "tech_fangu";
 export interface TreasureDef { id: string; name: string; desc: string; legacyCost: number; effect: { stones?: number; cult?: number } }
 export interface LocationDef { id: string; name: string; desc: string; minRealm: number; group: string }
 export interface SectRankDef { id: string; name: string; contribNeed: number; realmNeed: number; stipend: number; cultivateBonus: number }
@@ -341,6 +367,40 @@ export interface LocationDropsDef {
   drops: LocationDropDef[];
 }
 
+// U-399 探索事件分布密度（来源 A-70《Tutien Path》）：给各地点设
+// 事件密度参数与隐藏要素埋点数，全部只在本调参表一处维护
+// （content/explore-tuning.json），加载自检保证恰好覆盖全部 12 个
+// 地点：
+// - density（0–1）：每次探索（act explore）走到「踏上分叉路线」
+//   这一步时，先按此概率掷一次——命中才踏上路线走现有事件流程
+//   （事件池/牌堆、避开最近 3 个、Q34 探索 d80 结算、U-377 代价
+//   选项等全部不变）；未命中为安静一步（记一条无事发生的日志、
+//   时间成本照常）。密度只影响触发频率，不改事件内容与任何判
+//   定数值（计划原文的「d150 阈值」是 Q34 之前的旧说法，本项不
+//   碰判定）。寻仇/前世遗藏/封印之蛋线索等优先触发支在密度掷
+//   之前判定，口径不变；探索附带钩子（封印之蛋现身、际遇办妥
+//   后的拾矿/残页/法宝掉落）每次探索都掷、不受密度命中与否影
+//   响——拾矿/残页/法宝三掷本挂在际遇结算尾巴上，2026-11-20 审
+//   计修正后安静一步分支同样独立掷这三掷（种子流/概率/结算口
+//   径与尾巴一致，掷中照常发奖记日志，三掷皆空才是纯安静一
+//   步、无奖惩）。
+// - hiddenSlots（整数）：本世该地点可被发现的隐藏要素总数。剩
+//   余数存角色 hiddenSlots 字段（本世制、轮回重置、旧存档按本
+//   表默认值初始化）。路线「事件」节点摆事件之前先按
+//   hiddenChancePct 掷一次：掷中且该地点仍有剩余埋点，则改为触
+//   发一次隐藏发现并扣减 1 个埋点（奖励从既有奖励类型里按地点
+//   品阶给量，见 state.ts 的 maybeHiddenDiscovery）；无剩余埋点
+//   或未掷中则走普通事件，结算口径不变。
+// 默认值按地点性格给：人烟稠密处（凡村/坊市/宗门一带）0.85–0.95、
+// 野外 0.6–0.75、险地深处 0.5–0.65；hiddenSlots 1–3（凡村 1、
+// 遗迹/险地 3）。定性词由 density 分档派生（≥0.8 稠密 / ≥0.65
+// 适中 / 其余稀疏），地图卡小字展示用，不另存。
+export interface ExploreTuningRowDef { density: number; hiddenSlots: number }
+export interface ExploreTuningDef {
+  hiddenChancePct: number;
+  locations: Record<string, ExploreTuningRowDef>;
+}
+
 // U-608 细时钟核心（Q37 第八轮定夺第一项）：时间单位细化到月——
 // 1 年 = monthsPerYear（12）个月；每个动作的耗时只在本配置表一处
 // 维护（content/time-costs.json）：行动按 costs 推进累计月份（角
@@ -399,6 +459,52 @@ export interface CraftSkillsDef {
   kinds: Record<CraftKind, CraftKindDef>;
 }
 
+// U-612 功法熟练度层配置表（Q38，2026-11-16 第九轮定夺）；U-626
+// （2026-11-18 用户定夺）起熟练度数值改为「层数 + 层内进度点」：
+// 每门功法的总层数在 techniques.json 逐门声明（layers，可为 null
+// = 无限层），本表只定全功法共用的每层点数与涨幅，数值只在本表
+// 一处维护，功法本身的数值（bonusPct）一字不动：
+// - pointsPerLayer 每层所需进度点（全功法统一，草稿 20 点/层）；
+//   一门功法的总点数 = 总层数 × pointsPerLayer，攒满总点数即修
+//   满全部层数 = 精通（圆满）；
+// - combatGain / cultivateGain / practiceGain 三条增长路径各自的
+//   单次涨幅（攒的是层内进度点）——「用」（斗法施展 resolveFight、
+//   修炼结算 doSimpleAction 的 cultivate 分支）已接线；「练」（在
+//   家练习）属 U-470/U-613，本项只在结算层预留 practiceGain 与
+//   gainTechniqueProficiency 的 "practice" 来源，练习动作本身不
+//   在本项新造；
+// - masteryBonusStepPct 精通加成档步长：功法现有的修正就是其修炼
+//   加成 bonusPct，档位阶梯为 15/20/25（步长 5，见 techniques
+//   .json 与 techniqueDropTier 的派生档）；精通后有效加成 = 基础
+//   bonusPct + 本步长，即沿用既有档位口径上升一档（U-470 精通档
+//   口径），不另起数值体系。进度/精通的存档与结算在 state.ts
+//   （character.techProgress 存总点数 points，本世口径，轮回不带
+//   走——跨世重学口径属 U-614/U-626，本项不动轮回结算框架）。
+export interface TechniqueMasteryDef {
+  pointsPerLayer: number;
+  combatGain: number;
+  cultivateGain: number;
+  practiceGain: number;
+  masteryBonusStepPct: number;
+  // U-086 知识图鉴重学加成（用户 2026-11-18 定：两者都做、幅度都
+  // 小）起按固定两数发放；U-614（同日追加定夺）改为连续自适应
+  // 模型：图鉴曾精通功法存印记强度 t（0–100），待遇由 t 线性换
+  // 算——涨幅加成 = imprintFloorGainPct + round((imprintFullGainPct
+  // − imprintFloorGainPct) × t/100)（t=100 时满档、t=0 时下限）。
+  // U-626：起始待遇改为进度占比口径——起始占比% = round(
+  // imprintFullStartPct × t/100)（满印记 = 总进度的 10%），落盘
+  // 时按该功法总点数换算成总点数（层数 + 层内点由总点数派生，
+  // 见 imprintStartPointsFor）；与 U-614 的 0–100 熟练度口径等比
+  // 例（旧口径起始熟练度 round(10×t/100) / 100 即此占比）。衰减
+  // 规则（结算时按本世进度占比 p 扣 (100−p)/imprintDecayDivisor）
+  // 在 reincarnation.ts，本表只定换算的四个参数。
+  imprintFloorGainPct: number;
+  imprintFullGainPct: number;
+  imprintFullStartPct: number;
+  imprintDecayDivisor: number;
+}
+export type TechniqueProfSource = "combat" | "cultivate" | "practice";
+
 // ---------- schema 校验（zod；非法即抛错，带配置名与路径） ----------
 
 const num = z.number().finite();
@@ -423,7 +529,14 @@ const artifactFxSchema = z.strictObject({
   legacyBonus: z.number().int().min(0).max(3).optional(), pointsBonus: z.number().int().min(0).max(3).optional(),
 });
 const artifactSchema = z.strictObject({ id: str, name: str, desc: str, legacyCost: num, minRealm: z.number().int().min(0), fx: artifactFxSchema.optional() });
-const techSchema = z.strictObject({ id: str, name: str, desc: str, bonusPct: num, legacyCost: num });
+const techSchema = z.strictObject({
+  id: str, name: str, desc: str, bonusPct: num, legacyCost: num,
+  // U-627：功法类型（法修 = 引气类 / 体修 = 炼体类）。
+  kind: z.enum(["法修", "体修"]),
+  // U-626：品阶（五阶枚举）与总层数（正整数，或 null = 无限层）。
+  grade: z.enum(["凡", "黄", "玄", "地", "天"]),
+  layers: z.number().int().positive().nullable(),
+});
 const treasureSchema = z.strictObject({
   id: str, name: str, desc: str, legacyCost: num,
   effect: z.strictObject({ stones: num.optional(), cult: num.optional() }),
@@ -560,6 +673,15 @@ const locationDropsSchema = z.strictObject({
   tiers: z.strictObject({ low: dropTierSchema, mid: dropTierSchema, high: dropTierSchema }),
   drops: z.array(locationDropSchema),
 });
+// U-399：探索调参表 schema——顶层隐藏发现概率（百分点）与逐地点
+// 两项参数（density 每步触发事件的概率 0–1 / hiddenSlots 本世该
+// 地点可被发现的隐藏要素总数）；地点键集必须恰好覆盖全部地点、
+// 取值域在加载自检里逐项核。
+const exploreTuningRowSchema = z.strictObject({ density: num, hiddenSlots: num });
+const exploreTuningSchema = z.strictObject({
+  hiddenChancePct: num,
+  locations: z.record(z.string(), exploreTuningRowSchema),
+});
 // U-608：细时钟耗时表 schema——monthsPerYear、八个动作耗时键（键
 // 集由 strictObject 锁死，多键/缺键即拦）、逐目的地旅行月数（键
 // 是地点 id、覆盖与取值范围在加载自检里逐项核）。
@@ -590,6 +712,16 @@ const craftSkillsSchema = z.strictObject({
   kinds: z.strictObject({
     alchemy: craftKindSchema, forge: craftKindSchema, farm: craftKindSchema, fish: craftKindSchema,
   }),
+});
+// U-612/U-626：功法层数表 schema——每层点数/三路涨幅/精通档步长
+// 与印记换算四参数，取值域（正整数、步长与既有 bonusPct 档位阶
+// 梯同量级、起始占比 < 100）在加载自检里逐项核。
+const techniqueMasterySchema = z.strictObject({
+  pointsPerLayer: num,
+  combatGain: num, cultivateGain: num, practiceGain: num,
+  masteryBonusStepPct: num,
+  imprintFloorGainPct: num, imprintFullGainPct: num,
+  imprintFullStartPct: num, imprintDecayDivisor: num,
 });
 // U-464：锻造法宝表 schema——「矿石品阶—判定—法宝产出」表：7 阶
 // 矿石（与 U-499 的 7 阶矿石口径对齐，artifactRealm 恒等于 tier，
@@ -624,6 +756,26 @@ const artifactSourcesSchema = z.strictObject({
   sectGrants: z.array(z.strictObject({ rankId: str, artifactId: str, occupiedFallback: commissionRewardSchema, text: str })),
   commissionGrants: z.array(z.strictObject({ commissionId: str, artifactId: str, occupiedFallback: commissionRewardSchema, text: str })),
 });
+// U-401：秘境配置表 schema——顶层两概率与典籍折点、逐界一行（地
+// 点 / 丹药槽 / 典籍品阶 / 前置事件 / Boss 整行）；引用完整性与取
+// 值域在加载自检里逐项核。
+const secretRealmBossSchema = z.strictObject({
+  id: str, name: str, intro: str,
+  tier: num, might: num,
+  legacyPoints: num, artifactMinRealm: num,
+  occupiedFallback: commissionRewardSchema,
+});
+const secretRealmSchema = z.strictObject({
+  locationId: str,
+  pillId: z.enum(["heal", "cult", "brk"]), pillCount: num,
+  techGrade: z.enum(["凡", "黄", "玄", "地", "天"]),
+  preludeEventId: str,
+  boss: secretRealmBossSchema,
+});
+const secretRealmsSchema = z.strictObject({
+  slotChancePct: num, bossChancePct: num, techFallbackLegacyPoints: num,
+  realms: z.array(secretRealmSchema),
+});
 export interface ForgeTierDef { tier: number; id: string; name: string; artifactRealm: number; dc: number; stoneCost: number; buyPrice: number; dropWeight: number; minCraftLevel: number; minRealm: number }
 export interface ForgeDef { dropChancePct: number; tiers: ForgeTierDef[] }
 // U-620：本命法宝多途径获取配置表（来源 Q40，2026-11-16 第十一轮
@@ -647,6 +799,44 @@ export interface ArtifactSourcesDef {
   exploreDrop: { chancePct: number; pool: ArtifactDropEntryDef[]; occupiedFallback: Effect };
   sectGrants: ArtifactSectGrantDef[];
   commissionGrants: ArtifactCommissionGrantDef[];
+}
+// U-401 秘境探索配置表（来源 A-54《道途》，2026-11-20 用户定夺）：
+// 三界秘境是三个新增地点（沉沙古城 / 蓬莱洞天 / 黄泉鬼域，地点本
+// 体在 locations.json、门槛走既有 locUnlocked），本表只定秘境专属
+// 的三类固定掉落槽与隐藏 Boss，数值只在本表一处维护
+// （content/secret-realms.json）：
+// - slotChancePct：丹药/典籍两槽各自的触发概率（百分点）——在该
+//   地点探索时逐槽掷一次，命中即替代普通事件触发、领完本世该槽
+//   为空（状态存角色 secretRealms 字段、本世制、轮回重置）；
+// - pillId/pillCount：丹药槽给的现成丹药（shop.json 三丹之一，按
+//   界档位递增：人间回春 / 洞天聚气 / 地府破境）与数量，不新造丹；
+// - techGrade：典籍槽的功法品阶（人间黄 / 洞天玄 / 地府地阶）——
+//   保底学会一门该品阶未学功法；该品阶已全学会、或无灵根角色遇
+//   引气类不可学时，折给 techFallbackLegacyPoints 点传承点；
+// - preludeEventId：Boss 专属前置事件（该地点事件池里的一条，本
+//   世触发过后 Boss 才可能现身）；bossChancePct 为前置已触发后
+//   每次探索的现身概率（百分点）；boss 的 tier/might 走既有斗法
+//   难度口径（combatDcFor），打赢给 legacyPoints 点传承点 + 一件
+//   artifactMinRealm 档的未持有法宝（无合适法宝或槽已占时按
+//   occupiedFallback 折作），败北可再战、打赢本世槽空。
+export interface SecretRealmBossDef {
+  id: string; name: string; intro: string;
+  tier: number; might: number;
+  legacyPoints: number; artifactMinRealm: number;
+  occupiedFallback: Effect;
+}
+export interface SecretRealmDef {
+  locationId: string;
+  pillId: "heal" | "cult" | "brk"; pillCount: number;
+  techGrade: TechGrade;
+  preludeEventId: string;
+  boss: SecretRealmBossDef;
+}
+export interface SecretRealmsDef {
+  slotChancePct: number;
+  bossChancePct: number;
+  techFallbackLegacyPoints: number;
+  realms: SecretRealmDef[];
 }
 function load<T>(name: string, schema: z.ZodType<T>, raw: unknown): T {
   const r = schema.safeParse(raw);
@@ -691,10 +881,19 @@ export const SEALED_EGGS: SealedEggsDef = load("sealed-eggs.json", sealedEggsSch
 export const EVENT_PACKS: EventPacksDef = load("event-packs.json", eventPacksSchema, eventPacksJson);
 export const EVENT_RELEASES: EventReleasesDef = load("event-releases.json", eventReleasesSchema, eventReleasesJson);
 export const LOCATION_DROPS: LocationDropsDef = load("location-drops.json", locationDropsSchema, locationDropsJson);
+export const EXPLORE_TUNING: ExploreTuningDef = load("explore-tuning.json", exploreTuningSchema, exploreTuningJson);
 export const TIME_COSTS: TimeCostsDef = load("time-costs.json", timeCostsSchema, timeCostsJson);
 export const CRAFT_SKILLS: CraftSkillsDef = load("craft-skills.json", craftSkillsSchema, craftSkillsJson);
+export const TECHNIQUE_MASTERY: TechniqueMasteryDef = load("technique-mastery.json", techniqueMasterySchema, techniqueMasteryJson);
 export const FORGE: ForgeDef = load("forge.json", forgeSchema, forgeJson);
 export const ARTIFACT_SOURCES: ArtifactSourcesDef = load("artifact-sources.json", artifactSourcesSchema, artifactSourcesJson);
+export const SECRET_REALMS: SecretRealmsDef = load("secret-realms.json", secretRealmsSchema, secretRealmsJson);
+
+// U-401：按地点取秘境定义（非秘境地点返回 undefined，调用方不掷
+// 秘境槽位/Boss 判定，探索流程与改前逐字一致）。
+export function secretRealmAt(locationId: string): SecretRealmDef | undefined {
+  return SECRET_REALMS.realms.find((r) => r.locationId === locationId);
+}
 
 // U-464：按阶位取矿石行（未知阶位返回 undefined，调用方不结算）。
 export function forgeTierByTier(tier: number): ForgeTierDef | undefined {
@@ -746,6 +945,95 @@ export function craftYieldPctFor(kind: string, level: number): number {
   if (!CRAFT_KINDS.includes(kind as CraftKind)) return 0;
   const def = CRAFT_SKILLS.kinds[kind as CraftKind];
   return def.breakthroughs.find((b) => b.level === level)?.yieldPct ?? 0;
+}
+
+// U-612：功法熟练度的单次涨幅（按施展来源查配置表）：combat =
+// 斗法施展、cultivate = 修炼结算计入施展、practice = 在家练习
+// （U-470/U-613 的入口未做之前无调用方，仅结算层预留）。
+export function techniqueProfGainFor(source: TechniqueProfSource): number {
+  if (source === "combat") return TECHNIQUE_MASTERY.combatGain;
+  if (source === "cultivate") return TECHNIQUE_MASTERY.cultivateGain;
+  return TECHNIQUE_MASTERY.practiceGain;
+}
+
+// U-614：印记强度收敛——坏值（NaN/非数）按满强度 100（与旧存档
+// 缺字段同口径），越界收敛到 [0, 100]。全部印记读写都经此口。
+export function clampImprint(t: number): number {
+  if (typeof t !== "number" || !Number.isFinite(t)) return 100;
+  return Math.min(100, Math.max(0, t));
+}
+
+// ---------- U-626 功法层数：派生量与防护 ----------
+// 一门功法的总点数 = 总层数 × 每层点数；总层数为 null（无限层）
+// 时总点数为 null——任何需要总点数的计算都先经此口拿到 null 再
+// 防护，绝不拿无限值做除法/取模。
+export function techTotalPoints(tech: TechDef): number | null {
+  return tech.layers === null ? null : tech.layers * TECHNIQUE_MASTERY.pointsPerLayer;
+}
+// 总点数 → 层数分解（展示与结算共用）：layer 为当前所在层（1
+// 起，攒满一层进下一层）；layerPoints 为本层内已攒点；修满全
+// 部层数（points ≥ 总点数）时 layer = 总层数、layerPoints = 每
+// 层点数（本层已满）、ratio = 1。无限层时 layer/layerPoints 照
+// 常按每层点数分解（不依赖总层数），totalLayers/totalPoints 为
+// null、ratio 恒 0（无「修满」概念，占比无从定义——衰减公式只
+// 对曾精通条目用 p，而无限层功法永不精通、不会走到那里，此处
+// 只是防护兜底）。
+export interface TechLayerBreakdown {
+  points: number; layer: number; layerPoints: number;
+  pointsPerLayer: number; totalLayers: number | null; totalPoints: number | null;
+  ratio: number;
+}
+export function techLayerBreakdown(tech: TechDef, rawPoints: number): TechLayerBreakdown {
+  const ppl = TECHNIQUE_MASTERY.pointsPerLayer;
+  const totalPoints = techTotalPoints(tech);
+  const points = Math.max(0, Math.floor(Number.isFinite(rawPoints) ? rawPoints : 0));
+  if (totalPoints !== null && points >= totalPoints) {
+    return { points: totalPoints, layer: tech.layers ?? 0, layerPoints: ppl, pointsPerLayer: ppl, totalLayers: tech.layers, totalPoints, ratio: 1 };
+  }
+  return {
+    points,
+    layer: Math.floor(points / ppl) + 1,
+    layerPoints: points % ppl,
+    pointsPerLayer: ppl,
+    totalLayers: tech.layers,
+    totalPoints,
+    ratio: totalPoints !== null && totalPoints > 0 ? points / totalPoints : 0,
+  };
+}
+// 层数进度的玩家文案（日志/页面同源）：「第 N 层（本层 x/20 点）」
+// 或修满时「第 N 层圆满」；无限层不提总数。
+export function techLayerText(tech: TechDef, points: number): string {
+  const b = techLayerBreakdown(tech, points);
+  if (b.totalPoints !== null && b.ratio >= 1) return `第 ${b.layer} 层圆满`;
+  return `第 ${b.layer} 层（本层 ${b.layerPoints}/${b.pointsPerLayer} 点）`;
+}
+
+// U-614：印记强度 t → 重学/带走待遇换算（连续自适应模型，用户
+// 2026-11-18 定）：涨幅加成 = 下限 + round((满档 − 下限) × t/100)
+// （整数百分比，t=100 → 满档 25%、t=0 → 下限 5%）。U-626：起
+// 始待遇改按进度占比换算成总点数——起始占比% = round(满档起始
+// 占比 × t/100)（t=100 → 10%、t=0 → 0%，与 U-614 的起始熟练
+// 度 round(10×t/100)/100 等比例），起始总点数 = floor(总点数 ×
+// 占比%)，层数与层内点由总点数经 techLayerBreakdown 派生。换
+// 算只此一处，图鉴重学、免费带走、展示三方同源。
+export function imprintStartRatioPct(t: number): number {
+  return Math.round(TECHNIQUE_MASTERY.imprintFullStartPct * clampImprint(t) / 100);
+}
+export function imprintStartPointsFor(t: number, tech: TechDef): number {
+  const total = techTotalPoints(tech);
+  // 无限层无总点数可乘：防护兜底——按占比数值本身给点（不除以
+  // 任何无限量、不崩溃）；本项无无限层功法，此路不实际触发。
+  if (total === null) return imprintStartRatioPct(t);
+  return Math.floor(total * imprintStartRatioPct(t) / 100);
+}
+export function imprintValuesFor(t: number, tech: TechDef): { startPoints: number; startRatioPct: number; gainBonusPct: number } {
+  const c = clampImprint(t);
+  const m = TECHNIQUE_MASTERY;
+  return {
+    startPoints: imprintStartPointsFor(c, tech),
+    startRatioPct: imprintStartRatioPct(c),
+    gainBonusPct: m.imprintFloorGainPct + Math.round((m.imprintFullGainPct - m.imprintFloorGainPct) * c / 100),
+  };
 }
 
 // U-388：按 id 取委托定义（未知 id 返回 undefined，调用方不结算）。
@@ -835,6 +1123,30 @@ export function locationDropAt(locationId: string): LocationDropDef | undefined 
 // schema 保证齐备，恒有定义。
 export function dropTierDef(tier: DropTier): DropTierDef {
   return LOCATION_DROPS.tiers[tier];
+}
+
+// U-399：按地点取探索调参行（加载自检保证每个现有地点恰有一行；
+// 未知地点返回 undefined，调用方按无调参处理——不掷密度、照旧流程）。
+export function exploreTuningFor(locationId: string): ExploreTuningRowDef | undefined {
+  return EXPLORE_TUNING.locations[locationId];
+}
+
+// U-399：一份全新的本世埋点初始表（键 = 地点 id、值 = 配置表的
+// hiddenSlots）——降生构造点与旧存档迁移补值共用同一来源，返回
+// 新对象（调用方会就地扣减，不得共享配置表对象）。
+export function defaultHiddenSlots(): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [id, row] of Object.entries(EXPLORE_TUNING.locations)) out[id] = row.hiddenSlots;
+  return out;
+}
+
+// U-399：事件密度的定性词（地图卡小字展示）：由 density 分档派生
+// ——≥0.8「稠密」/ ≥0.65「适中」/ 其余「稀疏」；无调参行时回「适中」
+// （加载自检保证现有地点恒有行，此回退只是防御）。
+export function exploreDensityWord(locationId: string): string {
+  const row = EXPLORE_TUNING.locations[locationId];
+  if (!row) return "适中";
+  return row.density >= 0.8 ? "稠密" : row.density >= 0.65 ? "适中" : "稀疏";
 }
 
 // U-608：某动作的耗时月数（配置表 costs；键集由 schema 锁死，恒有值）。
@@ -1140,6 +1452,25 @@ function assertContentIntegrity(): void {
     const tech = TECHNIQUES.find((t) => t.id === d.techniqueId);
     if (tech && techniqueDropTier(tech) !== d.tier) throw bad(`location-drop at ${d.locationId} tier ${d.tier} does not match technique ${d.techniqueId} derived tier ${techniqueDropTier(tech)}`);
   }
+  // U-399：探索调参表自检——隐藏发现概率为 (0, 100] 的整数；地点
+  // 键集必须恰好覆盖全部现有地点（不多不少：漏一个地点探索就没
+  // 密度可掷、多一个就是引用了不存在的地点）；density 为 [0, 1]
+  // 的数（0 与 1 合法——0 = 此地永无际遇、1 = 步步有际遇，均为
+  // 可用的调参极端）；hiddenSlots 为 [0, 5] 的整数（本表实际给
+  // 1–3，上限留一级调参头寸，0 = 此地不埋隐藏要素）。
+  if (!Number.isInteger(EXPLORE_TUNING.hiddenChancePct) || EXPLORE_TUNING.hiddenChancePct <= 0 || EXPLORE_TUNING.hiddenChancePct > 100) throw bad(`explore-tuning hiddenChancePct must be an integer in (0, 100] (got ${EXPLORE_TUNING.hiddenChancePct})`);
+  const tuningIds = Object.keys(EXPLORE_TUNING.locations);
+  if (tuningIds.length !== LOCATIONS.length) throw bad(`explore-tuning locations must cover exactly the ${LOCATIONS.length} locations (got ${tuningIds.length})`);
+  for (const id of tuningIds) {
+    if (!locIds.has(id)) throw bad(`explore-tuning references unknown location ${id}`);
+    const row = EXPLORE_TUNING.locations[id];
+    if (!row) throw bad(`explore-tuning location ${id} hole`);
+    if (typeof row.density !== "number" || !(row.density >= 0) || !(row.density <= 1)) throw bad(`explore-tuning density for ${id} must be a number in [0, 1] (got ${row.density})`);
+    if (!Number.isInteger(row.hiddenSlots) || row.hiddenSlots < 0 || row.hiddenSlots > 5) throw bad(`explore-tuning hiddenSlots for ${id} must be an integer in [0, 5] (got ${row.hiddenSlots})`);
+  }
+  for (const l of LOCATIONS) {
+    if (!(l.id in EXPLORE_TUNING.locations)) throw bad(`explore-tuning missing location ${l.id}`);
+  }
   // U-608：细时钟耗时表自检——1 年必须恰为 12 个月（Q37 定夺的
   // 换算基数，年龄推导与旧存档迁移都按它算，不许配置漂移）；八
   // 个动作耗时必须为 [1, 12] 的整数（至少 1 个月——行动不能不耗
@@ -1220,6 +1551,37 @@ function assertContentIntegrity(): void {
       prevYield = b.yieldPct;
     }
   }
+  // U-612/U-626：功法层数表自检——每层点数/三路涨幅/精通档步长
+  // 均为正整数；精通档步长须与功法既有 bonusPct 档位阶梯
+  // （15/20/25，步长 5）同量级，上限 10——步长过大等于跳档，破
+  // 坏「上升一档」的口径。功法逐门自检：总层数须为正整数或
+  // null（无限层，字段预留）；品阶由 schema 枚举把关。
+  const tm = TECHNIQUE_MASTERY;
+  for (const f of ["pointsPerLayer", "combatGain", "cultivateGain", "practiceGain", "masteryBonusStepPct"] as const) {
+    if (!Number.isInteger(tm[f]) || tm[f] <= 0) throw bad(`technique-mastery ${f} must be a positive integer (got ${tm[f]})`);
+  }
+  if (tm.masteryBonusStepPct > 10) throw bad(`technique-mastery masteryBonusStepPct ${tm.masteryBonusStepPct} must be at most 10 (one bonusPct tier step is 5)`);
+  for (const t of TECHNIQUES) {
+    if (t.layers !== null && (!Number.isInteger(t.layers) || t.layers <= 0)) throw bad(`techniques ${t.id} layers must be a positive integer or null (infinite) (got ${t.layers})`);
+  }
+  // U-627：无灵根自检——灵根池须含 noroot（四维由 roots.json 给
+  // 定）；起步功法 tech_fangu 须存在且为体修类（无灵根开局自带
+  // 它，若被改成法修则无灵根角色开局即学不了自己的起步功法）。
+  if (!ROOTS.some((r) => r.id === NO_ROOT_ID)) throw bad(`roots must include the no-root entry (${NO_ROOT_ID})`);
+  const starterTech = TECHNIQUES.find((t) => t.id === NO_ROOT_STARTER_TECH_ID);
+  if (!starterTech) throw bad(`techniques must include the no-root starter technique (${NO_ROOT_STARTER_TECH_ID})`);
+  if (starterTech.kind !== "体修") throw bad(`techniques ${NO_ROOT_STARTER_TECH_ID} must be 体修 (no-root starter)`);
+  // U-614/U-626：印记换算参数自检——下限涨幅为 (0, 100) 的整数、
+  // 满档涨幅须严格大于下限且不高于 100（换算区间须为正）；满档
+  // 起始占比为 (0, 100) 的整数（重学只给一小截起步占比、不得开
+  // 局即精通：起始占比 round(pct×t/100) ≤ pct < 100 恒成立）；
+  // 衰减除数为不小于 1 的数（1/2 口径 = 除数 2；除数越小衰减越
+  // 快，除数 1 时一世未精通即全放掉——拦掉小于 1 的离谱值防印
+  // 记一世清零过快失去「渐淡」语义）。
+  if (!Number.isInteger(tm.imprintFloorGainPct) || tm.imprintFloorGainPct <= 0 || tm.imprintFloorGainPct >= 100) throw bad(`technique-mastery imprintFloorGainPct must be an integer in (0, 100) (got ${tm.imprintFloorGainPct})`);
+  if (!Number.isInteger(tm.imprintFullGainPct) || tm.imprintFullGainPct <= tm.imprintFloorGainPct || tm.imprintFullGainPct > 100) throw bad(`technique-mastery imprintFullGainPct must be an integer in (imprintFloorGainPct, 100] (got ${tm.imprintFullGainPct})`);
+  if (!Number.isInteger(tm.imprintFullStartPct) || tm.imprintFullStartPct <= 0 || tm.imprintFullStartPct >= 100) throw bad(`technique-mastery imprintFullStartPct must be an integer in (0, 100) (got ${tm.imprintFullStartPct})`);
+  if (typeof tm.imprintDecayDivisor !== "number" || !Number.isFinite(tm.imprintDecayDivisor) || tm.imprintDecayDivisor < 1) throw bad(`technique-mastery imprintDecayDivisor must be a finite number >= 1 (got ${tm.imprintDecayDivisor})`);
   // U-464：锻造表自检——恰 7 阶（与 U-499 的 7 阶矿石口径对齐）、
   // 阶号自 1 连续、id 唯一、artifactRealm 恒等于阶号（该阶矿石锻
   // 出该境界门槛的法宝）；难度/灵石代价/坊市价/掉落权重均为正整
@@ -1295,6 +1657,35 @@ function assertContentIntegrity(): void {
     seenGrantCommissions.add(g.commissionId);
     if (!asArtifactIds.has(g.artifactId)) throw bad(`artifact-sources commissionGrants references unknown artifact ${g.artifactId}`);
     checkFallback(`commissionGrants ${g.commissionId}`, g.occupiedFallback);
+  }
+  // U-401：秘境配置表自检——两概率为 (0, 100] 的整数百分点、典籍
+  // 折点为正整数；逐界核：地点必须存在且一界一地点不重复、丹药
+  // 数量为正整数、典籍品阶在该品阶下必须真有功法（否则典籍槽永
+  // 远只能折点、等于空槽）、前置事件必须存在且确实在该地点出没
+  // （前置永不触发 = Boss 永不现身，属配置笔误）、Boss 的境界档
+  // 与战力为合法整数、传承点奖励为正整数、法宝奖励档在法宝池里
+  // 必须真有法宝（否则大奖永远只能折灵石）、折作至少一项且各项
+  // 为正数。
+  const sr = SECRET_REALMS;
+  if (!Number.isInteger(sr.slotChancePct) || sr.slotChancePct <= 0 || sr.slotChancePct > 100) throw bad(`secret-realms slotChancePct must be an integer in (0, 100] (got ${sr.slotChancePct})`);
+  if (!Number.isInteger(sr.bossChancePct) || sr.bossChancePct <= 0 || sr.bossChancePct > 100) throw bad(`secret-realms bossChancePct must be an integer in (0, 100] (got ${sr.bossChancePct})`);
+  if (!Number.isInteger(sr.techFallbackLegacyPoints) || sr.techFallbackLegacyPoints <= 0) throw bad(`secret-realms techFallbackLegacyPoints must be a positive integer (got ${sr.techFallbackLegacyPoints})`);
+  if (sr.realms.length === 0) throw bad("secret-realms must define at least one realm");
+  unique("secret-realms.locations", sr.realms.map((r) => r.locationId));
+  unique("secret-realms.bosses", sr.realms.map((r) => r.boss.id));
+  for (const r of sr.realms) {
+    if (!locIds.has(r.locationId)) throw bad(`secret-realms references unknown location ${r.locationId}`);
+    if (!Number.isInteger(r.pillCount) || r.pillCount <= 0) throw bad(`secret-realms ${r.locationId} pillCount must be a positive integer`);
+    if (!TECHNIQUES.some((t) => t.grade === r.techGrade)) throw bad(`secret-realms ${r.locationId} techGrade ${r.techGrade} has no techniques in the pool`);
+    const prelude = EVENTS.find((e) => e.id === r.preludeEventId);
+    if (!prelude) throw bad(`secret-realms ${r.locationId} references unknown prelude event ${r.preludeEventId}`);
+    if (!prelude.locations.includes(r.locationId)) throw bad(`secret-realms ${r.locationId} prelude event ${r.preludeEventId} does not occur at that location`);
+    const b = r.boss;
+    if (!Number.isInteger(b.tier) || b.tier < 0 || b.tier >= CLASSIC_REALMS.length) throw bad(`secret-realms boss ${b.id} tier out of range (got ${b.tier})`);
+    if (!Number.isInteger(b.might) || b.might <= 0) throw bad(`secret-realms boss ${b.id} might must be a positive integer`);
+    if (!Number.isInteger(b.legacyPoints) || b.legacyPoints <= 0) throw bad(`secret-realms boss ${b.id} legacyPoints must be a positive integer`);
+    if (!ARTIFACTS.some((a) => a.minRealm === b.artifactMinRealm)) throw bad(`secret-realms boss ${b.id} artifactMinRealm ${b.artifactMinRealm} has no artifacts in the pool`);
+    checkFallback(`boss ${b.id}`, b.occupiedFallback);
   }
 }
 

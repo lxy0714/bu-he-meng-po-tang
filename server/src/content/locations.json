@@ -82,5 +82,26 @@
     "desc": "天河倒悬的巨瀑，水汽灵气充沛，瀑下炼体、潭边垂钓皆宜。",
     "minRealm": 0,
     "group": "falls"
+  },
+  {
+    "id": "sunken",
+    "name": "沉沙古城",
+    "desc": "没入黄沙的人间古城秘境，断壁残垣间藏着前朝修士的丹药与典籍。",
+    "minRealm": 0,
+    "group": "sunken"
+  },
+  {
+    "id": "penglai",
+    "name": "蓬莱洞天",
+    "desc": "海上洞天福地，云汀鹤唳、灵芝遍野——非筑基修士踏不进这片云雾。",
+    "minRealm": 1,
+    "group": "penglai"
+  },
+  {
+    "id": "underworld",
+    "name": "黄泉鬼域",
+    "desc": "阴气蚀骨的地府秘境，忘川支流与彼岸花海之间，藏着地阶失传典籍与索命的鬼将。",
+    "minRealm": 3,
+    "group": "underworld"
   }
 ]

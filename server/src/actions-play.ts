@@ -3,15 +3,15 @@
 
 import { defineAction, z } from "./platform";
 import {
-DAILY_EVENTS, JADE_PER_LAYER, SECT_RANKS, SHOP, CRAFT_SKILLS, destinyById, enemyById, forgeCandidatesFor, forgeTierByTier, locById, sectGrantForRank, sectRankById, shopPrice, techById, travelMonthsTo, treasureById,
+DAILY_EVENTS, JADE_PER_LAYER, SECT_RANKS, SHOP, CRAFT_SKILLS, destinyById, enemyById, exploreTuningFor, forgeCandidatesFor, forgeTierByTier, locById, secretRealmAt, sectGrantForRank, sectRankById, shopPrice, techById, techLayerText, travelMonthsTo, treasureById,
 type CraftKind,
 type DailyCommissionDef,
 } from "./data";
 import { ATTR_NAME, EVENTS, eventCostBlockReason, formatEffectGains, formatEventCost, loopDcFor, loopMultiplier, scaleEffectForLoop, type Effect, type EventDef, type EventOptionDef } from "./events";
 import {
 addRelation, advanceActionMonths, advanceTravelMonths, advanceYears, activeArtifactFx, applyEffects, applyEventCost, artifactGate, attrOf, bumpCommissions, bumpGroupCount, bumpTimedEvents, checkDeath, completeDailyCommission, craftBonusFor, craftLevelFor, craftProficiencyOf, craftUsesFor, craftYieldPctOf, dailyObjectiveText, dailyPendingHere, decayMult, drawEventFromDeck, eventBonusFor, finishRouteStep, forgeGateFor, grantArtifact, hasRelationKind, lifespanMonthsOf, loadState, monthsOfYears, oreCountFor, removeArtifactBonus,
-artifactGrantOutcomeText, ensureDailyBoard, locUnlocked, maybeDropArtifact, maybeDropOre, maybeDropTechniquePage, maybeFindSealedEgg, pushLog, realmText, realmsFor, resolveFight, rngForNext, rollCheck, saveState, settleArtifactGrant, settleSignInHere, shuffledEventDeck, startRoute, syncArtifactGate, threshold, weekKeyOf,
-type Character, type GameState, type PendingEvent, type PendingLoop,
+artifactGrantOutcomeText, ensureDailyBoard, gainTechniqueProficiency, isNoRoot, locUnlocked, maybeDropArtifact, maybeDropOre, maybeDropTechniquePage, maybeFindSealedEgg, maybeHiddenDiscovery, maybeSecretRealmBoss, maybeSecretRealmSlot, notePendingEventBlock, noteSecretRealmPrelude, pushLog, realmText, realmsFor, resolveFight, rngForNext, rollCheck, saveState, settleArtifactGrant, settleSecretRealmBossFight, settleSignInHere, shuffledEventDeck, startRoute, syncArtifactGate, techEffectiveBonusPctOf, threshold, weekKeyOf,
+type Character, type GameState, type PendingEvent, type PendingLoop, type PendingOption,
 } from "./state";
 import { stateResponse, toResponse, type StateResponse } from "./respond";
 import { rangeTable, uniformTable, weighted } from "./rng";
@@ -129,6 +129,10 @@ function presentDrawnEvent(state: GameState, c: Character, ev: EventDef, dailyDe
     c.pendingEvent.desc = `【今日委托 · ${dailyDef.title}】${dailyDef.brief}\n${c.pendingEvent.desc}`;
   }
   pushLog(state, c.lifeNo, "event", `遭遇事件：${ev.title}。`);
+  // U-401：若这正是某处秘境的专属前置事件，本世该秘境的隐藏
+  // Boss 就此被惊动（此后探索该秘境才可能现身，见 state.ts 的
+  // noteSecretRealmPrelude）；普通事件调用时无任何副作用。
+  noteSecretRealmPrelude(state, ev.id);
 }
 
 // 把一张牌堆事件摆成待决事件：U-381 路线「事件」节点与 U-384 经营
@@ -188,13 +192,23 @@ function doSimpleAction(state: GameState, kind: string): string | null {
   let summary: string | null = null;
 
   if (kind === "cultivate") {
+    // U-627：无灵根角色的修炼即「炼体」——驱动属性由神识换成体
+    // 魄（floor(体魄/2)，与引气口径同构替换），其余结算链（地点
+    // 加成、天赋/道侣/功法/命格/法宝倍率、宗门加成、衰减、耗时
+    // 12 月、攒点 +3）一字不变；炼体不耗灵力（引气路径的灵力
+    // −8 是消耗不是门槛、本就不卡人，炼体索性不扣——无灵根的
+    // 灵力只余斗法等既有用途，不因炼体被掏空）。
+    const noRoot = isNoRoot(c);
     const locBonus = c.locationId === "sect" ? 6 : c.locationId === "realm" ? 4 : c.locationId === "cave" ? 5 + c.caveLevel * 3 : c.locationId === "temple" ? 3 : c.locationId === "falls" ? 3 : c.locationId === "border" ? 2 : 0;
-    let gain = rngForNext(state, "cultivate").int(14, 30) + Math.floor(attrOf(c, "sense") / 2) + locBonus;
+    let gain = rngForNext(state, "cultivate").int(14, 30) + Math.floor(attrOf(c, noRoot ? "body" : "sense") / 2) + locBonus;
     if (c.talentIds.includes("t_diligent")) gain = Math.floor(gain * 1.25);
     // Q18：有道侣同修，阴阳调和，修炼收益 +12%。
     if (hasRelationKind(c, "partner")) gain = Math.floor(gain * 1.12);
     const tech = techById(c.techniqueId);
-    if (tech) gain = Math.floor(gain * (1 + tech.bonusPct / 100));
+    // U-612：功法加成按有效值结算——已精通的功法在基础 bonusPct
+    // 上按配置表精通档步长上升一档（techEffectiveBonusPctOf）；
+    // 未精通时有效值 = 基础值，与改前逐字一致。
+    if (tech) gain = Math.floor(gain * (1 + techEffectiveBonusPctOf(c, tech) / 100));
     const destiny = destinyById(c.destinyId);
     if (destiny?.cultPct) gain = Math.floor(gain * (1 + destiny.cultPct / 100));
     // U-617：聚灵类法宝（聚灵幡/悟道蒲团）修炼收益按配置百分比
@@ -209,11 +223,23 @@ function doSimpleAction(state: GameState, kind: string): string | null {
     c.cultivation += finalGain; c.totalCultivation += finalGain;
     // U-608：修炼耗时按细时钟配置表（cultivate，草稿 12 月 = 一年，节奏与改前一致）。
     advanceActionMonths(state, "cultivate");
-    c.mp = Math.max(0, c.mp - 8);
+    // U-627：炼体不耗灵力（见上方分支头注），引气路径照旧 −8。
+    if (!noRoot) c.mp = Math.max(0, c.mp - 8);
     bumpGroupCount(c);
-    pushLog(state, c.lifeNo, "cultivate", `闭关修炼一年，修为 +${finalGain}${mult < 1 ? `（本周同类收益衰减至 ${Math.round(mult * 100)}%）` : ""}。`);
-    checkDeath(state, "修炼时寿元耗尽");
-    summary = `修炼一年，修为 +${finalGain}`;
+    // U-612：修炼即施展——当前修习功法在本次修炼结算中计入施展
+    // 一次，攒点按配置表 cultivateGain 增长（每次修炼动作只结
+    // 算一次，预设路线连走时每步各算一次施展）；进度附在本条日
+    // 志后（U-626 层数口径），升层与臻至精通由 gainTechnique-
+    // Proficiency 另记专条明示。
+    const profGain = gainTechniqueProficiency(state, "cultivate");
+    const profNote = profGain && tech ? `《${profGain.name}》${techLayerText(tech, profGain.after)}${profGain.mastered ? "（已精通）" : ""}${profGain.relearned ? `（知识图鉴重学加成：本次 +${profGain.gained} 点，基础 +${profGain.baseGain} 点）` : ""}。` : "";
+    // U-627：炼体文案——无灵根不写「闭关引气」，写锤炼筋骨、以
+    // 体魄入道；数值与衰减注记口径与引气路径一致。
+    pushLog(state, c.lifeNo, "cultivate", noRoot
+      ? `炼体一年，锤炼筋骨、气血搬运，修为 +${finalGain}${mult < 1 ? `（本周同类收益衰减至 ${Math.round(mult * 100)}%）` : ""}。无灵根引气无门，修为全凭体魄打熬。${profNote}`
+      : `闭关修炼一年，修为 +${finalGain}${mult < 1 ? `（本周同类收益衰减至 ${Math.round(mult * 100)}%）` : ""}。${profNote}`);
+    checkDeath(state, noRoot ? "炼体时寿元耗尽" : "修炼时寿元耗尽");
+    summary = noRoot ? `炼体一年，修为 +${finalGain}` : `修炼一年，修为 +${finalGain}`;
   }
 
   if (kind === "rest") {
@@ -314,7 +340,7 @@ function executeQuickPlan(state: GameState): void {
 
 export const playActions = {
   act: defineAction({
-    description: "执行一项日常行动：修炼、突破、探索（踏上 U-381 分叉路线，寻仇/遗藏仍优先触发；探索时当前地点埋有未拾的封印之蛋会按配置概率随机现身、拾取记入跨世收集进度，集齐门槛换一条只提示地点的前世遗藏线索，U-393）、休整、炼丹炼器、灵田劳作或垂钓（四门副职各自累计熟练度、破限解锁产量加成且熟练度等级决定副职判定骰面下限，U-482）；经营/休整类行动（修炼/休整/副职）结算后按配置概率（U-384）可能被一桩现有事件池的随机变故打断，摆成待决事件走既有抉择结算；路线进行中须先选节点或收程，本动作不受理。",
+    description: "执行一项日常行动：修炼、突破、探索（踏上 U-381 分叉路线，寻仇/遗藏仍优先触发；探索时当前地点埋有未拾的封印之蛋会按配置概率随机现身、拾取记入跨世收集进度，集齐门槛换一条只提示地点的前世遗藏线索，U-393；优先触发落空后、踏上路线之前先按当前地点的事件密度掷一次，未命中为安静一步——只记一条无事发生的日志、耗时照常、无奖励无惩罚，U-399）、休整、炼丹炼器、灵田劳作或垂钓（四门副职各自累计熟练度、破限解锁产量加成且熟练度等级决定副职判定骰面下限，U-482）；经营/休整类行动（修炼/休整/副职）结算后按配置概率（U-384）可能被一桩现有事件池的随机变故打断，摆成待决事件走既有抉择结算；路线进行中须先选节点或收程，本动作不受理。",
     request: z.object({ kind: z.enum(["cultivate", "breakthrough", "explore", "rest", "alchemy", "forge", "farm", "fish"]) }),
     response: stateResponse,
     async handler(ctx, args): Promise<StateResponse> {
@@ -327,7 +353,12 @@ export const playActions = {
       const wk = weekKeyOf(new Date());
       if (c.weekKey !== wk) { c.weekKey = wk; c.groupCounts = {}; }
 
-      if (c.pendingEvent && args.kind !== "explore") return toResponse(state);
+      if (c.pendingEvent && args.kind !== "explore") {
+        // 2026-11-18 自测修复：待决事件拦截不再静默，明示先处理待决事件。
+        notePendingEventBlock(state);
+        await saveState(ctx, state);
+        return toResponse(state);
+      }
       // U-381：路线进行中（节点待选或节点事件待决），日常行动一律不
       // 受理——先在路线卡上选节点（或收程放弃），免得路线状态与日常
       // 结算互相穿插。
@@ -403,7 +434,11 @@ export const playActions = {
       }
 
       if (args.kind === "explore") {
-        if (c.pendingEvent) return toResponse(state);
+        if (c.pendingEvent) {
+          notePendingEventBlock(state);
+          await saveState(ctx, state);
+          return toResponse(state);
+        }
         // U-608：探索耗时按细时钟配置表（explore，草稿 3 月）——出门
         // 历练本身耗时，在触发判定（拾蛋/寻仇/遗藏/路线）之前先推进；
         // 路线节点各自的耗时（战斗/休息节点）仍按各自的动作键另计，
@@ -456,14 +491,53 @@ export const playActions = {
           };
           pushLog(state, c.lifeNo, "event", `线索应验：在${rv.locationName}寻见了无主前世遗藏「${rv.treasureName}」。`);
         } else if (!c.pendingEvent) {
-          // U-381 分叉地图路线选择：普通探索不再直接抽事件——寻仇与
-          // 遗藏两支优先触发都落空后，改为踏上分叉路线（共 5 层、每
-          // 层三选一节点），由 chooseRouteNode 按节点类型触发战斗/
-          // 精英/事件/商店/休息；其中「事件」节点才走牌堆抽取
-          // （presentDeckEvent，抽牌与结算口径与原探索逐字一致）。
-          // 牌堆模型（U-576）与抽取口径保持可用，路线层只决定下一步
-          // 触发哪一类。
-          startRoute(state, c);
+          // U-401 秘境探索：身处三界秘境时，先判定隐藏 Boss 现身
+          // （前置已触发且未击败才掷，见 maybeSecretRealmBoss），
+          // 再判定固定掉落槽（丹药/典籍逐槽按配置概率掷，命中即
+          // 领、本次探索就此结算，替代普通事件触发，见
+          // maybeSecretRealmSlot）；两支都落空才照旧走下方密度/
+          // 路线流程。非秘境地点两支都不掷骰，流程与改前逐字一致。
+          if (maybeSecretRealmBoss(state)) {
+            // Boss 已现身摆成待决事件，本次探索到此为止。
+          } else if (maybeSecretRealmSlot(state)) {
+            // 固定掉落槽已领取，本次探索到此为止。
+          } else {
+          // U-399 探索事件密度：寻仇/遗藏/线索三支优先触发都落空
+          // 后、踏上路线之前，先按当前地点的事件密度（配置表
+          // explore-tuning.json 的 density）掷一次（种子流
+          // explore:density）——未命中则为安静一步：记一条无事发
+          // 生的日志，探索耗时（上方已推进的 3 个月）照常、不踏路
+          // 线。密度只影响触发频率：命中后走的路线与事件流程（牌
+          // 堆、避开最近 3 个、Q34 探索 d80、U-377 代价选项）与改
+          // 前逐字一致；封印之蛋等探索附带钩子在密度掷之前已照旧
+          // 掷过，不受命中与否影响。
+          const tuning = exploreTuningFor(c.locationId);
+          if (tuning && !rngForNext(state, "explore:density").chance(tuning.density)) {
+            const locName = locById(c.locationId)?.name ?? c.locationId;
+            pushLog(state, c.lifeNo, "event", `🍃 在「${locName}」一带走了一圈，一路无话，并无异事——只有山风与自己的脚步声。`);
+            // U-399 修正（2026-11-20 审计）：探索附带钩子每次探索
+            // 都掷、不受密度命中与否影响——安静一步同样独立掷一
+            // 遍与际遇结算尾巴（chooseOption 成功分支）相同的三
+            // 掷：U-396 功法残页（drop:page）/ U-464 拾矿
+            // （drop:ore）/ U-620 法宝掉落（drop:artifact），各自
+            // 独立种子流、概率与结算口径与尾巴逐字一致。掷中照常
+            // 发奖并由各钩子自记日志；三掷皆空本步才是纯安静一步
+            // （无奖惩、3 个月耗时照常）。此前安静步直接跳过这三
+            // 掷，密度越低漏掉的掉落机会越多，与原需求第 2 条相悖。
+            maybeDropTechniquePage(state);
+            maybeDropOre(state);
+            maybeDropArtifact(state);
+          } else {
+            // U-381 分叉地图路线选择：普通探索不再直接抽事件——寻仇与
+            // 遗藏两支优先触发都落空后，改为踏上分叉路线（共 5 层、每
+            // 层三选一节点），由 chooseRouteNode 按节点类型触发战斗/
+            // 精英/事件/商店/休息；其中「事件」节点才走牌堆抽取
+            // （presentDeckEvent，抽牌与结算口径与原探索逐字一致）。
+            // 牌堆模型（U-576）与抽取口径保持可用，路线层只决定下一步
+            // 触发哪一类。
+            startRoute(state, c);
+          }
+          }
         }
       }
 
@@ -479,7 +553,8 @@ export const playActions = {
     async handler(ctx, args): Promise<StateResponse> {
       const state = await loadState(ctx);
       const c = state.character;
-      if (!c || c.dead || c.pendingEvent) return toResponse(state);
+      if (!c || c.dead) return toResponse(state);
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
       const wk = weekKeyOf(new Date());
       if (c.weekKey !== wk) { c.weekKey = wk; c.groupCounts = {}; }
       const rank = sectRankById(c.sectRankId);
@@ -598,9 +673,12 @@ export const playActions = {
       const pending = c.pendingEvent;
 
       // U-381 路线商店（行商驻足）：选项 0/1/2 = 按 Q17 商店同价买
-      // 回春/聚气/破境丹（价格公式与坊市完全一致 shopPrice），灵石
-      // 不足只记提示、卡片保留待另选；其余下标 = 拱手别过。买成或
-      // 离开后卡片关闭并推进路线一层（finishRouteStep）。
+      // 回春/聚气/破境丹（价格公式与坊市完全一致 shopPrice）；其余
+      // 下标 = 拱手别过。买成或离开后卡片关闭并推进路线一层
+      // （finishRouteStep）。灵石不足的选项在摆卡时已按 U-377 同
+      // 口径标 costBlocked 由客户端禁用（见 chooseRouteNode 商店
+      // 节点），此处灵石复核只是服务端兜底：万一被点到，只记提示、
+      // 卡片保留待另选，不结算。
       if (pending.id === "route:shop") {
         const keys = ["heal", "cult", "brk"] as const;
         const key = keys[args.optionIdx];
@@ -650,6 +728,24 @@ export const playActions = {
           c.lastRoll = { label: "前世遗藏", dice: 0, bonus: 0, total: 0, dc: 0, success: true, text: `循着封印之蛋的线索，取回「${rv.treasureName}」。` };
           pushLog(state, c.lifeNo, "treasure", `取回线索所指的前世遗藏「${rv.treasureName}」（封印之蛋线索应验）。`);
           state.sealedEggs.revealed = null;
+        }
+        c.pendingEvent = null;
+        await saveState(ctx, state);
+        return toResponse(state);
+      }
+
+      // U-401 秘境之主：选项 0 = 迎战——战斗本体走既有斗法链
+      // （settleSecretRealmBossFight 内的 resolveFight），打赢发
+      // 固定大奖并置空本世 Boss 槽、败北按斗法败北口径且可再战；
+      // 其余选项 = 暂避锋芒，不结算、不惩罚，Boss 仍会再来。
+      if (pending.id.startsWith("realmboss:")) {
+        const locId = pending.id.slice("realmboss:".length);
+        const realmDef = secretRealmAt(locId);
+        if (!realmDef || c.locationId !== realmDef.locationId) { c.pendingEvent = null; await saveState(ctx, state); return toResponse(state); }
+        if (args.optionIdx === 0) {
+          settleSecretRealmBossFight(state, realmDef);
+        } else {
+          pushLog(state, c.lifeNo, "event", `你暂避锋芒，退出了「${realmDef.boss.name}」的领地——它没有追来，还会在此地等你。`);
         }
         c.pendingEvent = null;
         await saveState(ctx, state);
@@ -870,13 +966,14 @@ export const playActions = {
   }),
 
   chooseRouteNode: defineAction({
-    description: "分叉路线选节点（U-381）：在当前层三个节点中选定一个——战斗/精英即刻按 Q15 斗法结算（对手为生成节点时定下的敌手，精英是本地点最强者）、事件从本世事件牌堆抽一张摆成待决事件（结算完推进一层）、商店摆出「行商驻足」卡按 Q17 同价买丹、休息按既有休整结算；即时结算的节点结算完即推进到下一层，走完第 5 层路线结束。",
+    description: "分叉路线选节点（U-381）：在当前层三个节点中选定一个——战斗/精英即刻按 Q15 斗法结算（对手为生成节点时定下的敌手，精英是本地点最强者）、事件从本世事件牌堆抽一张摆成待决事件（结算完推进一层；摆事件之前先掷隐藏发现：本地点仍有剩余埋点且按配置概率掷中时改为触发一次隐藏发现、扣减 1 个埋点并发既有类型奖励，U-399）、商店摆出「行商驻足」卡按 Q17 同价买丹、休息按既有休整结算；即时结算的节点结算完即推进到下一层，走完第 5 层路线结束。",
     request: z.object({ nodeIdx: z.number().int().min(0).max(2) }),
     response: stateResponse,
     async handler(ctx, args): Promise<StateResponse> {
       const state = await loadState(ctx);
       const c = state.character;
-      if (!c || c.dead || c.pendingEvent || !c.route) return toResponse(state);
+      if (!c || c.dead || !c.route) return toResponse(state);
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
       const route = c.route;
       const node = route.nodes[args.nodeIdx];
       if (!node) return toResponse(state);
@@ -884,11 +981,20 @@ export const playActions = {
       if (c.weekKey !== wk) { c.weekKey = wk; c.groupCounts = {}; }
 
       if (node.type === "event") {
-        // 事件节点：摆成待决事件就地结算，路线推进推迟到 chooseOption
-        // 把这桩事件结算完毕（finishRouteStep 钩子）。
-        presentDeckEvent(state, c);
-        // 地点无事件池等极端情形下没能摆出事件：不卡路线，直接推进。
-        if (!c.pendingEvent) finishRouteStep(state, c);
+        // U-399 隐藏要素：摆事件之前先掷隐藏发现（本地点仍有剩余
+        // 埋点且按配置概率掷中时，改为触发一次隐藏发现并扣减埋
+        // 点、奖励即刻落袋，见 state.ts 的 maybeHiddenDiscovery）；
+        // 触发了发现则本节点就此结算完毕、直接推进一层。未触发
+        // （无剩余埋点或未掷中）走普通事件，口径不变。
+        if (maybeHiddenDiscovery(state)) {
+          finishRouteStep(state, c);
+        } else {
+          // 事件节点：摆成待决事件就地结算，路线推进推迟到 chooseOption
+          // 把这桩事件结算完毕（finishRouteStep 钩子）。
+          presentDeckEvent(state, c);
+          // 地点无事件池等极端情形下没能摆出事件：不卡路线，直接推进。
+          if (!c.pendingEvent) finishRouteStep(state, c);
+        }
       } else if (node.type === "combat" || node.type === "elite") {
         const enemy = node.enemyId ? enemyById(node.enemyId) : undefined;
         if (enemy) {
@@ -901,14 +1007,28 @@ export const playActions = {
         // 商店节点：行商驻足——丹药与价格全用 Q17 商店表（shopPrice
         // 按境界分档），买成/离开在 chooseOption 的 route:shop 分支
         // 结算并推进路线。
+        // 2026-11-18 自测修复：购买选项带上与 U-377 代价模板同一
+        // 口径的 cost / costBlocked——灵石不足时客户端预先禁用并
+        // 明示原因，不再出现「点了只回提示、事件不关、可无限重复
+        // 点」。标价与 chooseOption 结算实扣同源（shopPrice）。
         c.pendingEvent = {
           id: "route:shop", title: "行商驻足", art: "market",
           desc: "赶路途中，一名行商在岔路口支起了摊子：担子里正是坊市丹药铺的三种丹药，价钱也与坊市分毫不差（按你的境界分档）。买与不买，只在此一面之缘。",
-          options: (["heal", "cult", "brk"] as const).map((k) => ({
-            label: `买${SHOP[k].name}`,
-            hint: `${SHOP[k].desc} · ${shopPrice(SHOP[k].base, c.realmIdx)} 灵石`,
-            attr: "fortune", dc: 0,
-          })).concat([{ label: "谢过行商，就此别过", hint: "不买东西 · 继续赶路", attr: "fortune", dc: 0 }]),
+          options: [
+            ...(["heal", "cult", "brk"] as const).map((k): PendingOption => {
+              const price = shopPrice(SHOP[k].base, c.realmIdx);
+              const cost: Effect = { stones: -price };
+              const blocked = eventCostBlockReason(c, cost);
+              return {
+                label: `买${SHOP[k].name}`,
+                hint: `${SHOP[k].desc} · ${price} 灵石`,
+                attr: "fortune", dc: 0,
+                cost,
+                ...(blocked ? { costBlocked: blocked } : {}),
+              };
+            }),
+            { label: "谢过行商，就此别过", hint: "不买东西 · 继续赶路", attr: "fortune", dc: 0 },
+          ],
         };
       } else {
         // 休息节点：既有休整结算（doSimpleAction 的 rest 分支，数值
@@ -928,7 +1048,8 @@ export const playActions = {
     async handler(ctx): Promise<StateResponse> {
       const state = await loadState(ctx);
       const c = state.character;
-      if (!c || c.dead || c.pendingEvent || !c.route) return toResponse(state);
+      if (!c || c.dead || !c.route) return toResponse(state);
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
       pushLog(state, c.lifeNo, "event", `🧭 在路线第 ${c.route.layer} 层就此收程，余下岔路留待下一程。`);
       c.route = null;
       await saveState(ctx, state);
@@ -943,7 +1064,10 @@ export const playActions = {
     async handler(ctx, args): Promise<StateResponse> {
       const state = await loadState(ctx);
       const c = state.character;
-      if (!c || c.dead || c.pendingEvent || c.route) return toResponse(state);
+      if (!c || c.dead) return toResponse(state);
+      // 待决守卫排在 route 早退之前（同 forgeArtifact 注释）。
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
+      if (c.route) return toResponse(state);
       const loc = locById(args.locationId);
       if (!loc || loc.id === c.locationId) return toResponse(state);
       if (!locUnlocked(c, loc)) return toResponse(state);
@@ -981,19 +1105,47 @@ export const playActions = {
   }),
 
   buryTreasure: defineAction({
-    description: "把一件宝物埋在当前地点作为前世遗藏：任一后世到此地探索必定取回，隔多世仍有效。",
+    description: "把一件宝物埋在当前地点作为前世遗藏：埋藏须真实封入宝物内容物等值的自有资源（修为/灵石按该宝物取回效果计，埋藏时当场扣除），任一后世到此地探索必定取回、取回即销账，隔多世仍有效。",
     request: z.object({ treasureId: z.string().min(1) }),
     response: stateResponse,
     async handler(ctx, args): Promise<StateResponse> {
       const state = await loadState(ctx);
       const c = state.character;
-      if (!c || c.dead || c.pendingEvent) return toResponse(state);
+      if (!c || c.dead) return toResponse(state);
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
       const tr = treasureById(args.treasureId);
       const loc = locById(c.locationId);
       if (!tr || !loc) return toResponse(state);
-      if (state.buried.some((b) => b.treasureId === tr.id && b.buriedLife === c.lifeNo)) return toResponse(state);
+      if (state.buried.some((b) => b.treasureId === tr.id && b.buriedLife === c.lifeNo)) {
+        pushLog(state, c.lifeNo, "hint", `本世已经埋过一件「${tr.name}」了——同世同类只埋一件，免得后世的自己挑花了眼。`);
+        await saveState(ctx, state);
+        return toResponse(state);
+      }
+      // 2026-11-18 自测修复（遗藏零成本刷）：埋藏必须真实持有并消
+      // 耗宝物的内容物——宝物取回时给多少（effect 的修为/灵石），
+      // 埋藏时就须先封入多少自有资源，当场扣除。付不起则明示原
+      // 因、不埋。取回侧既有口径不变（取回即从 buried 销账，一
+      // 件只能取回一次）。轮回结算用传承点赎回遗藏的那条路是另
+      // 一回事（已付传承点），不在此限。
+      const needCult = tr.effect.cult ?? 0;
+      const needStones = tr.effect.stones ?? 0;
+      const lacks: string[] = [];
+      if (c.cultivation < needCult) lacks.push(`修为需 ${needCult}（现有 ${c.cultivation}）`);
+      if (c.stones < needStones) lacks.push(`灵石需 ${needStones}（现有 ${c.stones}）`);
+      if (lacks.length > 0) {
+        pushLog(state, c.lifeNo, "hint", `埋不下「${tr.name}」：遗藏要封入真实的东西——${lacks.join("、")}。攒够了再来埋，空匣子骗不了后世的自己。`);
+        await saveState(ctx, state);
+        return toResponse(state);
+      }
+      const cost: Effect = {};
+      if (needCult) cost.cult = -needCult;
+      if (needStones) cost.stones = -needStones;
+      if (cost.cult || cost.stones) applyEffects(state, cost);
       state.buried.push({ treasureId: tr.id, treasureName: tr.name, locationId: loc.id, locationName: loc.name, buriedLife: c.lifeNo });
-      pushLog(state, c.lifeNo, "treasure", `在「${loc.name}」埋下「${tr.name}」——留给下一世的自己。`);
+      const costParts: string[] = [];
+      if (needCult) costParts.push(`修为 ${needCult}`);
+      if (needStones) costParts.push(`灵石 ${needStones}`);
+      pushLog(state, c.lifeNo, "treasure", `在「${loc.name}」埋下「${tr.name}」（封入${costParts.join("、")}，已当场扣除）——留给后世的自己，后世到此地探索即可取回。`);
       await saveState(ctx, state);
       return toResponse(state);
     },
@@ -1006,7 +1158,8 @@ export const playActions = {
     async handler(ctx): Promise<StateResponse> {
       const state = await loadState(ctx);
       const c = state.character;
-      if (!c || c.dead || c.pendingEvent) return toResponse(state);
+      if (!c || c.dead) return toResponse(state);
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
       // U-609：守卫按月比——献祭 5 年（60 个月）后累计月份不得触到
       // 寿元上限（月），与 checkDeath 的按月寿终判定同一口径。
       if (c.totalMonths + monthsOfYears(5) >= lifespanMonthsOf(c)) return toResponse(state);
@@ -1031,7 +1184,10 @@ export const playActions = {
     async handler(ctx, args): Promise<StateResponse> {
       const state = await loadState(ctx);
       const c = state.character;
-      if (!c || c.dead || c.pendingEvent || c.route) return toResponse(state);
+      if (!c || c.dead) return toResponse(state);
+      // 待决守卫排在 route 早退之前（同 forgeArtifact 注释）。
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
+      if (c.route) return toResponse(state);
       const wk = weekKeyOf(new Date());
       if (c.weekKey !== wk) { c.weekKey = wk; c.groupCounts = {}; }
       c.quickPlan = args.steps.map((s) => ({ kind: s.kind, count: s.count }));
@@ -1048,7 +1204,10 @@ export const playActions = {
     async handler(ctx): Promise<StateResponse> {
       const state = await loadState(ctx);
       const c = state.character;
-      if (!c || c.dead || c.pendingEvent || c.route || c.quickPlan.length === 0) return toResponse(state);
+      if (!c || c.dead) return toResponse(state);
+      // 待决守卫排在 route 早退之前（同 forgeArtifact 注释）。
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
+      if (c.route || c.quickPlan.length === 0) return toResponse(state);
       const wk = weekKeyOf(new Date());
       if (c.weekKey !== wk) { c.weekKey = wk; c.groupCounts = {}; }
       executeQuickPlan(state);
@@ -1078,7 +1237,9 @@ export const playActions = {
     async handler(ctx, args): Promise<StateResponse> {
       const state = await loadState(ctx);
       const c = state.character;
-      if (!c || c.dead || c.pendingEvent) return toResponse(state);
+      if (!c || c.dead) return toResponse(state);
+      // 2026-11-18 自测修复：有待决事件时买矿此前静默无反馈，现明示拦截。
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
       const tier = forgeTierByTier(args.tier);
       if (!tier) return toResponse(state);
       const price = shopPrice(tier.buyPrice, c.realmIdx);
@@ -1103,7 +1264,12 @@ export const playActions = {
     async handler(ctx, args): Promise<StateResponse> {
       const state = await loadState(ctx);
       const c = state.character;
-      if (!c || c.dead || c.pendingEvent || c.route) return toResponse(state);
+      if (!c || c.dead) return toResponse(state);
+      // 2026-11-18 自测修复：有待决事件时锻造此前静默无反馈，现明示拦截。
+      // 待决守卫必须排在 c.route 早退之前——路线事件/商店正是「在路线
+      // 中 + 有待决事件」的组合，守卫排在 route 早退之后等于永不触发。
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
+      if (c.route) return toResponse(state);
       const tier = forgeTierByTier(args.tier);
       if (!tier) return toResponse(state);
       // U-619：炼制双门槛服务端守卫（与锻造台整形同一 forgeGateFor

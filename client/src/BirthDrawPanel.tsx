@@ -2,7 +2,8 @@
 // 姓名不走抽选：自填输入框 + 随机按钮，在创建/结算视图里单独处理。
 // 本面板管出身/命格/灵根/天赋四项：主层是四项的当前状态总览（每项一行），
 // 点任一项进入二级选择页——该项的候选逐个列成大卡片带说明，
-// 点候选 = 自选、点「随机」= 降生时从候选里掷一个，选完自动返回总览。
+// 点候选 = 自选、点「随机」= 当场从候选里掷一个定下（降生按掷
+// 中的落定，展示值与最终结果一致），选完自动返回总览。
 
 import { useState } from "react";
 import type { BirthDraw, DrawField, State } from "./types";
@@ -73,12 +74,12 @@ export function BirthDrawPanel({ state, draw, busy, onChoice, onTalents, onRedra
             <p className="font-brush text-base font-black"><Seal ch={fd.icon} /> 选择{fd.label}</p>
             <span className="text-[11px] text-[var(--dim)]">{fd.poolNote} · 候选 3 个</span>
           </div>
-          <p className="text-xs leading-relaxed text-[var(--dim)]">点候选 = 自选定下这一项；点「随机」= 降生时从这 3 个候选里掷一个。选完自动返回。</p>
+          <p className="text-xs leading-relaxed text-[var(--dim)]">点候选 = 自选定下这一项；点「随机」= 当场从这 3 个候选里掷一个定下，降生就按掷中的落定（不满意可再点一次重掷）。选完自动返回。</p>
           <button type="button" disabled={busy} aria-pressed={choice.random}
             onClick={() => { onChoice(fd.field, true); setPage(null); }}
             className={`w-full rounded-xl border-2 p-3 text-left disabled:opacity-50 ${choice.random ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--border)] bg-[var(--bg)]"}`}>
             <span className="font-song text-sm font-bold">随机{choice.random ? " ✓" : ""}</span>
-            <span className="mt-0.5 block text-xs leading-relaxed break-words text-[var(--dim)]">候选：{choice.pool.map((v) => fd.render(v).name).join(" / ")}——降生时掷定。</span>
+            <span className="mt-0.5 block text-xs leading-relaxed break-words text-[var(--dim)]">候选：{choice.pool.map((v) => fd.render(v).name).join(" / ")}——点此当场掷定，掷中哪个，降生就落哪个。</span>
           </button>
           {choice.pool.map((v) => {
             const d = fd.render(v);
@@ -121,7 +122,7 @@ export function BirthDrawPanel({ state, draw, busy, onChoice, onTalents, onRedra
         }
         const current = fd.render(choice.value);
         const summary = choice.random
-          ? `随机（候选：${choice.pool.map((v) => fd.render(v).name).join(" / ")}）`
+          ? `随机（已掷中「${current.name}」，降生按此落定）`
           : `${current.name}${current.desc ? ` —— ${current.desc}` : ""}`;
         return (
           <button key={fd.field} type="button" disabled={busy} onClick={() => setPage(fd.field)}

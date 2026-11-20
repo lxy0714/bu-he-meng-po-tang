@@ -21,7 +21,7 @@ import { defineAction, z } from "./platform";
 import { COMMISSIONS, commissionById, commissionGrantFor, locById, npcById } from "./data";
 import { formatEffectGains } from "./events";
 import {
-addRelation, applyEffects, artifactGrantOutcomeText, commissionObjectiveText, loadState, pushLog, saveState, settleArtifactGrant,
+addRelation, applyEffects, artifactGrantOutcomeText, commissionObjectiveText, loadState, notePendingEventBlock, pushLog, saveState, settleArtifactGrant,
 } from "./state";
 import { stateResponse, toResponse, type StateResponse } from "./respond";
 
@@ -36,7 +36,10 @@ export const boardActions = {
     async handler(ctx, args): Promise<StateResponse> {
       const state = await loadState(ctx);
       const c = state.character;
-      if (!c || c.dead || c.pendingEvent || c.route || !c.commissions) return toResponse(state);
+      if (!c || c.dead) return toResponse(state);
+      // 待决守卫排在 route 早退之前（同 actions-play forgeArtifact 注释）。
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
+      if (c.route || !c.commissions) return toResponse(state);
       const cs = c.commissions;
       const def = commissionById(args.commissionId);
       if (!def) return toResponse(state);

@@ -4,6 +4,23 @@
 >
 > This file records the real development milestones of *No Mengpo Soup*. v1.0.0 is the initial open-source release, collecting everything built before it in a hosted environment. All dates are actual completion dates; no fictional versions.
 
+## v1.1.0 — 三界秘境与无灵根 · Secret Realms & the Rootless（2026-11-20）
+
+### 2026-11-18 ~ 20 — 功法品阶、无灵根、探索调参与三界秘境 · Technique Tiers, the Rootless, Exploration Tuning & Secret Realms
+
+- 功法品阶与层数（U-626）：功法新增凡/黄/玄/地/天五阶品阶；熟练度改层数制（每层 20 点，黄 6 层 / 玄 8 层 / 地 10 层），修满即精通、加成升一档；老存档熟练度按比例换算不清零。
+  Technique tiers & layers (U-626): techniques gained five tiers （凡/黄/玄/地/天）; proficiency became a layer system (20 points per layer; 6/8/10 layers by tier) — a full stack means mastery and a stronger bonus; legacy proficiency converts proportionally, never wiped.
+- 无灵根（U-627）：降生灵根池新增「无灵根」——引气无门，只能修体修类功法，修炼改炼体（体魄驱动）；起步体修功法《凡骨锻体篇》进普通功法池，无灵根开局自带；引气类功法在签到/残页/赎回/免费带走全部途径被拦截并明示。
+  The Rootless (U-627): a new birth root, "no spiritual root" — qi-gathering techniques are barred on every acquisition path; cultivation becomes body tempering driven by physique; the starter body technique 《凡骨锻体篇》 joins the common pool and is granted at birth.
+- 探索密度调参（U-399）：每个地点配事件密度与隐藏埋点（调参表），探索有概率是「安静步」或撞见隐藏发现，埋点挖完为止、轮回重置；安静步同样独立结算残页/拾矿/法宝掉落钩子，不因无事发生而少掉机会。
+  Exploration tuning (U-399): per-location event density and hidden-cache counts in a tuning table; exploration can be a "quiet step" or a hidden discovery, caches deplete per life and reset on reincarnation; quiet steps still roll the page/ore/treasure hooks independently.
+- 地点境界门槛落定（U-400）：门槛表按现状定稿——7 处无门槛、筑基 3 处、金丹 1 处、元婴 1 处，硬锁；青冥秘境特例保留（第一世需筑基，第二世起取消）。
+  Location realm gates settled (U-400): 7 locations open, 3 at Foundation, 1 at Golden Core, 1 at Nascent Soul, hard locks; the Azure Secret Realm exception stays (Foundation required in the first life only).
+- 三界秘境（U-401）：地图 12 → 15 处，新增人间「沉沙古城」（无门槛）、洞天「蓬莱洞天」（筑基）、地府「黄泉鬼域」（元婴）；每界每世三类固定掉落槽（稀有丹药 / 失传典籍 / 隐藏 Boss），领完即空、轮回重置；三只隐藏 Boss 须先触发专属前置事件才现身，打赢给传承点与对应档法宝。
+  Three secret realms (U-401): the map grew from 12 to 15 locations — Sunken City (open), Penglai Grotto (Foundation), Yellow Springs (Nascent Soul); each realm holds three fixed per-life caches (rare pills / a lost technique / a hidden boss), emptied once taken and reset on reincarnation; each boss appears only after its bespoke trigger event and pays heritage points plus a tiered treasure.
+- 主菜单美术与修复：主菜单换上「忘川彼岸」全屏水墨背景（奈何桥 + 孟婆汤摊 + 彼岸花），按钮改半透明宣纸纸笺、靠左竖列；题屏锁定不可滚动；修复散功重开失败被静默吞掉、导致「输入不后悔后无法开新游戏」的问题（散功桥接失败自动重试，确认弹窗成功前不关闭、失败明示可原地重试）；主菜单两条按钮说明文案过长被截断，已缩短。
+  Main-menu art & fixes: a full-screen ink-wash backdrop (Bridge of Helplessness, Mengpo's stall, red spider lilies) with translucent rice-paper buttons in a left column; the menu screen no longer scrolls; fixed a silent reset failure that made "new game" appear dead after typing the confirmation (bridge failures now auto-retry, the confirm dialog stays open until success and explains failures in place); two over-long menu hints that were truncated have been shortened.
+
 ## v1.0.0 — 开源初始版本 · Initial Open-Source Release（2026-11-17）
 
 ### 2026-11-16 — 细时钟、法宝、设置与视觉 · Fine Clock, Treasures, Settings, Visuals
