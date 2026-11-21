@@ -3,14 +3,15 @@
 
 import { defineAction, z } from "./platform";
 import {
-DAILY_EVENTS, JADE_PER_LAYER, SECT_RANKS, SHOP, CRAFT_SKILLS, destinyById, enemyById, exploreTuningFor, forgeCandidatesFor, forgeTierByTier, locById, secretRealmAt, sectGrantForRank, sectRankById, shopPrice, techById, techLayerText, travelMonthsTo, treasureById,
+DAILY_EVENTS, JADE_PER_LAYER, SECT_RANKS, SHOP, CRAFT_SKILLS, GRID_CELL_LABELS, RAMPAGE_EVENT_DEF, RESONANCE, RESONANCE_ENCOUNTER_DEFS, annualEventById, destinyById, enemyById, exploreTuningFor, forgeCandidatesFor, forgeTierByTier, gridChapterFor, gridFallbackEventById, isRandomExploreEventId, locById, randomExploreEventById, randomExploreGrantFor, randomExploreModeById, resonanceEventById, secretRealmAt, sectGrantForRank, sectRankById, shopPrice, techById, techLayerText, travelMonthsTo, treasureById, tribulationFor,
+type ActionPointKey,
 type CraftKind,
 type DailyCommissionDef,
 } from "./data";
 import { ATTR_NAME, EVENTS, eventCostBlockReason, formatEffectGains, formatEventCost, loopDcFor, loopMultiplier, scaleEffectForLoop, type Effect, type EventDef, type EventOptionDef } from "./events";
 import {
-addRelation, advanceActionMonths, advanceTravelMonths, advanceYears, activeArtifactFx, applyEffects, applyEventCost, artifactGate, attrOf, bumpCommissions, bumpGroupCount, bumpTimedEvents, checkDeath, completeDailyCommission, craftBonusFor, craftLevelFor, craftProficiencyOf, craftUsesFor, craftYieldPctOf, dailyObjectiveText, dailyPendingHere, decayMult, drawEventFromDeck, eventBonusFor, finishRouteStep, forgeGateFor, grantArtifact, hasRelationKind, lifespanMonthsOf, loadState, monthsOfYears, oreCountFor, removeArtifactBonus,
-artifactGrantOutcomeText, ensureDailyBoard, gainTechniqueProficiency, isNoRoot, locUnlocked, maybeDropArtifact, maybeDropOre, maybeDropTechniquePage, maybeFindSealedEgg, maybeHiddenDiscovery, maybeSecretRealmBoss, maybeSecretRealmSlot, notePendingEventBlock, noteSecretRealmPrelude, pushLog, realmText, realmsFor, resolveFight, rngForNext, rollCheck, saveState, settleArtifactGrant, settleSecretRealmBossFight, settleSignInHere, shuffledEventDeck, startRoute, syncArtifactGate, techEffectiveBonusPctOf, threshold, weekKeyOf,
+addRelation, advanceActionMonths, advanceTravelMonths, advanceYears, activeArtifactFx, applyEffects, applyEventCost, artifactGate, attrOf, bumpCommissions, bumpGroupCount, bumpQuests, bumpTimedEvents, checkDeath, completeDailyCommission, craftBonusFor, craftLevelFor, craftProficiencyOf, craftUsesFor, craftYieldPctOf, dailyObjectiveText, dailyPendingHere, decayMult, drawEventFromDeck, eventBonusFor, finishRouteStep, forgeGateFor, grantArtifact, hasRelationKind, lifespanMonthsOf, loadState, monthsOfYears, oreCountFor, removeArtifactBonus,
+artifactGrantOutcomeText, ascendAfterBreakthrough, breakthroughPillBlockReason, concludeTribulation, dealGridBoard, drawGridEvent, drawRandomExploreEvent, ensureDailyBoard, gainTechniqueProficiency, isMajorBreakthroughNext, isNoRoot, locUnlocked, maybeDropArtifact, maybeDropOre, maybeDropTechniquePage, maybeFindSealedEgg, maybeHiddenDiscovery, maybeSecretRealmBoss, maybeSecretRealmSlot, notePendingEventBlock, noteSecretRealmPrelude, presentGridEvent, pushLog, realmText, realmsFor, resonanceDisorderActive, resonanceStateOf, resolveFight, rngForNext, rollCheck, saveState, settleArtifactGrant, settleRandomExploreGrant, settleSecretRealmBossFight, settleSignInHere, settleTribulationFight, shuffledEventDeck, spendActionPoints, startRoute, syncArtifactGate, techEffectiveBonusPctOf, threshold, weekKeyOf,
 type Character, type GameState, type PendingEvent, type PendingLoop, type PendingOption,
 } from "./state";
 import { stateResponse, toResponse, type StateResponse } from "./respond";
@@ -184,11 +185,76 @@ function maybeTriggerDailyEvent(state: GameState): void {
   presentDeckEvent(state, c);
 }
 
+// ---------- U-416 属性共鸣 / 失衡：奇遇呈现与暴走触发 ----------
+
+// 把一桩共鸣奇遇 / 灵力暴走摆成待决事件：构建与 presentDrawn-
+// Event 同口径（代价复制 + 付不起原因预先算好），另盖 resonance
+// 标记（encounter / rampage），chooseOption 据此走 U-416 口径
+// 结算。不走 Q34 机缘档位上调——共鸣与暴走都是角色自身的体内
+// 际遇、不分品阶，难度以配置原值为准（玩家在选项上看到多少就
+// 是多少）。
+function presentResonanceEvent(state: GameState, c: Character, ev: EventDef, kind: "encounter" | "rampage"): void {
+  c.recentEvents = [...c.recentEvents, ev.id].slice(-3);
+  c.pendingEvent = {
+    id: ev.id, title: ev.title, desc: ev.desc, art: ev.art,
+    resonance: { kind },
+    options: ev.options.map((o) => {
+      const base = { label: o.label, hint: o.hint, attr: o.attr, dc: o.dc };
+      if (!o.cost) return base;
+      const blocked = eventCostBlockReason(c, o.cost);
+      return { ...base, cost: o.cost, ...(blocked ? { costBlocked: blocked } : {}) };
+    }),
+  };
+  pushLog(state, c.lifeNo, "event", `遭遇事件：${ev.title}。`);
+}
+
+// U-416：灵力失衡期间，每次修炼 / 探索结算后按配置概率
+// （rampageChancePct，种子流 resonance:rampage）触发一次「灵力
+// 暴走」——摆成待决事件走 chooseOption 的 U-416 专属分支（气血
+// 钳制不致死、留紊乱 debuff、绝不触发死亡链）。守卫与经营日常
+// 事件同口径：已陨落、已有待决事件、路线进行中或渡劫中都不触
+// 发（不与既有待决链穿插）。状态非失衡时不掷骰。返回是否触发。
+function maybeTriggerRampage(state: GameState): boolean {
+  const c = state.character;
+  if (!c || c.dead || c.pendingEvent || c.route || c.tribulation) return false;
+  if (resonanceStateOf(c).kind !== "imbalance") return false;
+  if (!rngForNext(state, "resonance:rampage").chance(RESONANCE.rampageChancePct / 100)) return false;
+  pushLog(state, c.lifeNo, "event", `🌀 灵力暴走：四维失衡日久，体内灵力忽然脱缰——这一关只在你自己体内，先了结它再说其他。`);
+  presentResonanceEvent(state, c, RAMPAGE_EVENT_DEF, "rampage");
+  return true;
+}
+
+// U-416：四象共鸣期间，探索按配置概率（resonanceEncounter-
+// ChancePct，种子流 resonance:encounter-chance）把本程普通探索
+// 替换为共鸣奇遇：从配置表 3 桩专属小事件里按 commonality 加
+// 权抽一桩（种子流 resonance:encounter，避开最近 3 个事件、沿
+// 用现有避重口径），摆成待决事件走既有 chooseOption 结算链。
+// 状态非共鸣时不掷骰。返回是否替换。
+function maybePresentResonanceEncounter(state: GameState): boolean {
+  const c = state.character;
+  if (!c || c.dead || c.pendingEvent) return false;
+  if (resonanceStateOf(c).kind !== "resonance") return false;
+  if (!rngForNext(state, "resonance:encounter-chance").chance(RESONANCE.resonanceEncounterChancePct / 100)) return false;
+  const recent = new Set(c.recentEvents);
+  let pool = RESONANCE_ENCOUNTER_DEFS.filter((e) => !recent.has(e.id));
+  if (pool.length === 0) pool = [...RESONANCE_ENCOUNTER_DEFS];
+  const ev = weighted(rngForNext(state, "resonance:encounter"), pool.map((e) => ({ value: e, commonality: e.commonality })));
+  pushLog(state, c.lifeNo, "event", `✨ 四象共鸣：四维调和如一，这一程的际遇被共鸣牵引，化作一桩只属于调和者的奇遇。`);
+  presentResonanceEvent(state, c, ev, "encounter");
+  return true;
+}
+
 // 执行一步无事件行动（修炼/休整/副职），返回一句小结；不可执行时返回 null。
 // U-384：行动结算后有概率被经营日常随机事件打断（见 maybeTriggerDailyEvent）。
 function doSimpleAction(state: GameState, kind: string): string | null {
   const c = state.character;
   if (!c || c.dead || c.pendingEvent) return null;
+  // U-409：行动点在动作开始时扣除（修炼 20 / 副职 12 / 休整 0，
+  // 配置表 action-points.json）——点数不足时 spendActionPoints
+  // 已记明示原因、本步不执行（返回 null，预设路线据此停步，
+  // 与遇事件/陨落停步同口径）；判定、收益、耗时一字不动。
+  const apKey: ActionPointKey = kind === "cultivate" ? "cultivate" : kind === "rest" ? "rest" : "craft";
+  if (!spendActionPoints(state, apKey)) return null;
   let summary: string | null = null;
 
   if (kind === "cultivate") {
@@ -217,6 +283,16 @@ function doSimpleAction(state: GameState, kind: string): string | null {
     const cultFx = activeArtifactFx(state, c);
     if (cultFx?.cultPct) gain = Math.floor(gain * (1 + cultFx.cultPct / 100));
     if (cultFx?.cavePct && c.locationId === "cave") gain = Math.floor(gain * (1 + cultFx.cavePct / 100));
+    // U-416：四象共鸣时修炼收益按配置 +5%（与命格 / 法宝同口径
+    // 叠乘）；灵力紊乱生效期间按配置 −10%（debuff 只折修炼收
+    // 益、不碰其他结算）。状态在本次修炼结算前按当前四维实时
+    // 判定（紊乱到期月份在下方 advanceActionMonths 里才推进，
+    // 故本回修炼仍按紊乱中结算——与「持续 N 个月」的口径一
+    // 致）。两项都在下方日志里明示。
+    const resonanceKind = resonanceStateOf(c).kind;
+    if (resonanceKind === "resonance") gain = Math.floor(gain * (1 + RESONANCE.resonanceCultivateBonusPct / 100));
+    const disorderOn = resonanceDisorderActive(c);
+    if (disorderOn) gain = Math.floor(gain * (1 - RESONANCE.disorderCultivatePenaltyPct / 100));
     gain += sectRankById(c.sectRankId)?.cultivateBonus ?? 0;
     const mult = decayMult(c.groupCounts[locById(c.locationId)?.group ?? ""] ?? 0);
     const finalGain = Math.max(1, Math.floor(gain * mult));
@@ -235,10 +311,16 @@ function doSimpleAction(state: GameState, kind: string): string | null {
     const profNote = profGain && tech ? `《${profGain.name}》${techLayerText(tech, profGain.after)}${profGain.mastered ? "（已精通）" : ""}${profGain.relearned ? `（知识图鉴重学加成：本次 +${profGain.gained} 点，基础 +${profGain.baseGain} 点）` : ""}。` : "";
     // U-627：炼体文案——无灵根不写「闭关引气」，写锤炼筋骨、以
     // 体魄入道；数值与衰减注记口径与引气路径一致。
+    // U-416：共鸣加成 / 紊乱惩罚的日志注记（数值已在上方结算，
+    // 此处只作文案明示，玩家对账可见）。
+    const resonanceNote = `${resonanceKind === "resonance" ? `（四象共鸣：修炼收益 +${RESONANCE.resonanceCultivateBonusPct}%）` : ""}${disorderOn ? `（灵力紊乱未消：修炼收益 −${RESONANCE.disorderCultivatePenaltyPct}%）` : ""}`;
     pushLog(state, c.lifeNo, "cultivate", noRoot
-      ? `炼体一年，锤炼筋骨、气血搬运，修为 +${finalGain}${mult < 1 ? `（本周同类收益衰减至 ${Math.round(mult * 100)}%）` : ""}。无灵根引气无门，修为全凭体魄打熬。${profNote}`
-      : `闭关修炼一年，修为 +${finalGain}${mult < 1 ? `（本周同类收益衰减至 ${Math.round(mult * 100)}%）` : ""}。${profNote}`);
+      ? `炼体一年，锤炼筋骨、气血搬运，修为 +${finalGain}${mult < 1 ? `（本周同类收益衰减至 ${Math.round(mult * 100)}%）` : ""}${resonanceNote}。无灵根引气无门，修为全凭体魄打熬。${profNote}`
+      : `闭关修炼一年，修为 +${finalGain}${mult < 1 ? `（本周同类收益衰减至 ${Math.round(mult * 100)}%）` : ""}${resonanceNote}。${profNote}`);
     checkDeath(state, noRoot ? "炼体时寿元耗尽" : "修炼时寿元耗尽");
+    // U-407：修炼一回，推进连环任务当前阶段的「修炼」目标（无灵
+    // 根的炼体同为修炼动作、同一口径；陨落时 bumpQuests 自行跳过）。
+    bumpQuests(state, "cultivate", {});
     summary = noRoot ? `炼体一年，修为 +${finalGain}` : `修炼一年，修为 +${finalGain}`;
   }
 
@@ -314,8 +396,14 @@ function doSimpleAction(state: GameState, kind: string): string | null {
     bumpCommissions(state, "craft", c.locationId);
     // U-389：同一回副职同样推进「副职」类限时帖进度（口径与委托一致）。
     bumpTimedEvents(state, "craft", c.locationId);
+    // U-407：同一回副职同样推进连环任务当前阶段的「副职」目标。
+    bumpQuests(state, "craft", { locationId: c.locationId });
     summary = `${cfg.label}${success ? "成功" : "失败"} · 熟练度 ${profAfter}${levelAfter > levelBefore ? ` · 破限 Lv${levelAfter}` : ""}`;
   }
+  // U-416：修炼这一步结算完毕后，灵力失衡有概率引来灵力暴走
+  //（只修炼触发——探索的暴走掷在 act 的探索分支里）；暴走摆成
+  // 待决事件后，紧随其后的经营日常事件掷自会因待决守卫让位。
+  if (summary !== null && kind === "cultivate") maybeTriggerRampage(state);
   // U-384：这一步日常行动结算完毕（且确实执行了），按概率掷一次
   // 经营日常随机事件触发；触发与否都不改本步的小结与既有结算。
   if (summary !== null) maybeTriggerDailyEvent(state);
@@ -340,7 +428,7 @@ function executeQuickPlan(state: GameState): void {
 
 export const playActions = {
   act: defineAction({
-    description: "执行一项日常行动：修炼、突破、探索（踏上 U-381 分叉路线，寻仇/遗藏仍优先触发；探索时当前地点埋有未拾的封印之蛋会按配置概率随机现身、拾取记入跨世收集进度，集齐门槛换一条只提示地点的前世遗藏线索，U-393；优先触发落空后、踏上路线之前先按当前地点的事件密度掷一次，未命中为安静一步——只记一条无事发生的日志、耗时照常、无奖励无惩罚，U-399）、休整、炼丹炼器、灵田劳作或垂钓（四门副职各自累计熟练度、破限解锁产量加成且熟练度等级决定副职判定骰面下限，U-482）；经营/休整类行动（修炼/休整/副职）结算后按配置概率（U-384）可能被一桩现有事件池的随机变故打断，摆成待决事件走既有抉择结算；路线进行中须先选节点或收程，本动作不受理。",
+    description: "执行一项日常行动：修炼、突破、探索（踏上 U-381 分叉路线，寻仇/遗藏仍优先触发；探索时当前地点埋有未拾的封印之蛋会按配置概率随机现身、拾取记入跨世收集进度，集齐门槛换一条只提示地点的前世遗藏线索，U-393；优先触发落空后、踏上路线之前先按当前地点的事件密度掷一次，未命中为安静一步——只记一条无事发生的日志、耗时照常、无奖励无惩罚，U-399）、休整、炼丹炼器、灵田劳作或垂钓（四门副职各自累计熟练度、破限解锁产量加成且熟练度等级决定副职判定骰面下限，U-482）；经营/休整类行动（修炼/休整/副职）结算后按配置概率（U-384）可能被一桩现有事件池的随机变故打断，摆成待决事件走既有抉择结算；路线进行中须先选节点或收程，本动作不受理；属性共鸣/失衡（U-416）：四维配比实时判定四象共鸣/平稳/灵力失衡（只读现有四维、不新增属性）——共鸣时修炼收益按配置 +5%（日志可见）、探索按配置概率把本程普通探索替换为共鸣奇遇（3 桩专属小事件），失衡时修炼/探索结算后按配置概率触发灵力暴走待决事件（结算见 chooseOption 的 U-416 专属分支）。",
     request: z.object({ kind: z.enum(["cultivate", "breakthrough", "explore", "rest", "alchemy", "forge", "farm", "fish"]) }),
     response: stateResponse,
     async handler(ctx, args): Promise<StateResponse> {
@@ -353,8 +441,10 @@ export const playActions = {
       const wk = weekKeyOf(new Date());
       if (c.weekKey !== wk) { c.weekKey = wk; c.groupCounts = {}; }
 
-      if (c.pendingEvent && args.kind !== "explore") {
+      if ((c.pendingEvent || c.tribulation) && args.kind !== "explore") {
         // 2026-11-18 自测修复：待决事件拦截不再静默，明示先处理待决事件。
+        // U-415：渡劫进行中同属待决状态，一并在此拦下（提示文案由
+        // notePendingEventBlock 按状态区分）。
         notePendingEventBlock(state);
         await saveState(ctx, state);
         return toResponse(state);
@@ -371,6 +461,22 @@ export const playActions = {
       if (args.kind === "breakthrough") {
         const need = threshold(c.realmIdx, c.stageIdx);
         if (c.cultivation < need || c.pendingEvent) return toResponse(state);
+        // U-414：大境界突破的持丹门槛——下一步是大境界突破（境
+        // 界序号递增）且丹药囊无破境丹时拦下并明示原因（缺丹 +
+        // 指引禁地夺丹/坊市等既有来源），不扣行动点、不掷骰、不
+        // 静默失败；小境界突破不走此门槛。破境丹的消耗点 U-415
+        // 起改在渡劫成功、正式升境时（见 state.ts 的 conclude-
+        // Tribulation）——判定成功但渡劫失败不消耗。
+        const pillBlock = breakthroughPillBlockReason(state);
+        if (pillBlock) {
+          pushLog(state, c.lifeNo, "hint", pillBlock);
+          await saveState(ctx, state);
+          return toResponse(state);
+        }
+        const majorNext = isMajorBreakthroughNext(c, state.settings);
+        // U-409：突破耗行动点 15（配置表）——修为已达门槛、真正
+        // 掷骰之前扣点，成败都扣；点数不足明示原因、不掷骰。
+        if (!spendActionPoints(state, "breakthrough")) { await saveState(ctx, state); return toResponse(state); }
         // U-563：突破难度（118 + 境界×6、守心如玉 −10、Q18 师父护法 −8）
         // 与额外加成（业力/5 + 破关如喝水 +10 + 破境助力）的公式出自
         // 检定配置表（checks.ts 的 BREAKTHROUGH_CHECK），数值逐字不变。
@@ -384,6 +490,11 @@ export const playActions = {
         // Q17：破境丹/师父指点的破境助力在本次突破时消耗。
         const usedBreakBonus = c.breakBonus;
         c.breakBonus = 0;
+        // U-415：连败保底计数快照（掷骰前）——判定成功时保底
+        // modifier 会把计数清零；若这是大境界突破且随后渡劫失
+        // 败，劫后结算按此快照恢复（渡劫失败不推进也不清空保
+        // 底，见 TribulationState.breakFailsBefore）。
+        const breakFailsBefore = c.breakFails;
         // U-569：连败保底走 modifier 链——难度减免（连败×5、封顶 20）与
         // 掷骰后的连败增减（失败 +1、成功清零）都由 breakthroughPityModifier
         // 在 rollCheck 内处理，生效难度以 roll.dc 为准；数值与改前一致。
@@ -395,22 +506,35 @@ export const playActions = {
         if (success) {
           c.cultivation -= need;
           const before = realmText(c, state.settings);
-          if (c.stageIdx < 3) c.stageIdx += 1;
-          else if (c.realmIdx < realms.length - 1) {
-            c.realmIdx += 1; c.stageIdx = 0;
-            const d = realms[c.realmIdx];
-            if (d) { c.lifespan = d.lifespan; c.maxHp = d.hp; c.maxMp = d.mp; }
-          }
-          if (c.talentIds.includes("t_sturdy")) c.maxHp += 20;
-          if (c.talentIds.includes("t_focus")) c.maxMp += 20;
-          if (c.talentIds.includes("t_longlife")) c.lifespan = Math.floor(c.lifespan * 1.2);
-          c.hp = c.maxHp; c.mp = c.maxMp;
-          pushLog(state, c.lifeNo, "breakthrough", `突破成功：${before} → ${realmText(c, state.settings)}！判定明细：${roll.detail.text}${formatModifierTrace(roll.detail.modifierTrace) ? `（${formatModifierTrace(roll.detail.modifierTrace)}）` : ""}。`);
-          // U-618：突破跨境后，封存中的本命法宝可能就此达门槛——统一
-          // 对齐（自动解封补加成并记日志），与修为进阶同一入口。
-          syncArtifactGate(state, c);
-          if (c.realmIdx === realms.length - 1 && c.stageIdx === 3) {
-            pushLog(state, c.lifeNo, "breakthrough", "已至此界之巅——再进一步，便是渡劫飞升。（本团当前以此为顶点）");
+          if (majorNext) {
+            // U-415 渡劫仪式（U-414 挂点在此兑现）：大境界突破判
+            // 定成功不直接升境——进入渡劫三段（雷劫来临 → 渡劫
+            // 战 → 劫后结算，推进走 tribulation 动作，结算在
+            // state.ts 的 settleTribulationFight / concludeTri-
+            // bulation）。升境、破境丹消耗（U-415 改点：渡劫成
+            // 功、正式升境时才消耗）、任务推进与法宝对齐全部推
+            // 迟到劫后结算的升境单一路径（ascendAfterBreak-
+            // through）；渡劫失败则修为退回、保底恢复、停在大
+            // 圆满（见 concludeTribulation）。渡劫状态自此进入
+            // 待决拦截（notePendingEventBlock），进存档可续。
+            const tribDef = tribulationFor(c.realmIdx + 1);
+            c.tribulation = { phase: "arrival", targetRealmIdx: c.realmIdx + 1, spentCultivation: need, breakFailsBefore, won: false };
+            pushLog(state, c.lifeNo, "breakthrough", `突破判定已过：${before} 的关窍应声而开，境界之门近在咫尺——但门外雷云汇聚，天劫将至。判定明细：${roll.detail.text}${formatModifierTrace(roll.detail.modifierTrace) ? `（${formatModifierTrace(roll.detail.modifierTrace)}）` : ""}。渡过雷劫，方成${realms[c.realmIdx + 1]?.name ?? ""}境。`);
+            if (tribDef) pushLog(state, c.lifeNo, "event", `⚡ 雷劫来临 —— ${tribDef.intro}`);
+          } else {
+            // 小境界突破：判定成功即升境（无渡劫），升境结算走
+            // 单一路径 ascendAfterBreakthrough（与渡劫胜后的升
+            // 境同一实现）。
+            ascendAfterBreakthrough(state, c);
+            pushLog(state, c.lifeNo, "breakthrough", `突破成功：${before} → ${realmText(c, state.settings)}！判定明细：${roll.detail.text}${formatModifierTrace(roll.detail.modifierTrace) ? `（${formatModifierTrace(roll.detail.modifierTrace)}）` : ""}。`);
+            // U-407：突破成功，推进连环任务当前阶段的「突破」目标。
+            bumpQuests(state, "breakthrough", {});
+            // U-618：突破跨境后，封存中的本命法宝可能就此达门槛——统一
+            // 对齐（自动解封补加成并记日志），与修为进阶同一入口。
+            syncArtifactGate(state, c);
+            if (c.realmIdx === realms.length - 1 && c.stageIdx === 3) {
+              pushLog(state, c.lifeNo, "breakthrough", "已至此界之巅——再进一步，便是渡劫飞升。（本团当前以此为顶点）");
+            }
           }
         } else {
           // 连败计数已由保底 modifier 的 afterRoll +1（见上方 rollCheck 调用）。
@@ -434,16 +558,25 @@ export const playActions = {
       }
 
       if (args.kind === "explore") {
-        if (c.pendingEvent) {
+        if (c.pendingEvent || c.tribulation) {
           notePendingEventBlock(state);
           await saveState(ctx, state);
           return toResponse(state);
         }
+        // U-409：探索耗行动点 10（配置表）——出门之前扣点；点数
+        // 不足明示原因、不推进时钟、不触发任何探索钩子。
+        if (!spendActionPoints(state, "explore")) { await saveState(ctx, state); return toResponse(state); }
         // U-608：探索耗时按细时钟配置表（explore，草稿 3 月）——出门
         // 历练本身耗时，在触发判定（拾蛋/寻仇/遗藏/路线）之前先推进；
         // 路线节点各自的耗时（战斗/休息节点）仍按各自的动作键另计，
         // 事件抉择结算（chooseOption）本身不再另计耗时。
         advanceActionMonths(state, "explore");
+        // U-416：灵力失衡时，本次探索先按配置概率掷一次灵力暴走
+        // ——暴走摆成待决事件后，本程其余探索分支（遗藏 / 秘境 /
+        // 密度 / 路线）本就以 !c.pendingEvent 为前提、自然让位；
+        // 寻仇分支的掷骰在下方一并补上同一守卫（旧路径下此处待
+        // 决恒为空，补守卫不改既有行为）。
+        maybeTriggerRampage(state);
         // U-393 封印之蛋：探索时当前地点埋有未拾之蛋时，按配置概率
         // 随机现身、当场拾取记入跨世收集进度（集齐门槛另行换出前世
         // 遗藏线索，见 state.ts maybeFindSealedEgg）。拾取不占待决
@@ -451,8 +584,10 @@ export const playActions = {
         // 与结算规则；本地点无蛋或蛋已拾得时不掷骰、不留痕。
         maybeFindSealedEgg(state);
         // Q18：仇怨够深的仇敌会主动寻仇——探索时三成概率被堵个正着。
+        // U-416 补守卫：灵力暴走刚摆成待决事件时寻仇不再抢槽（旧
+        // 路径下进入本段时待决恒为空，此守卫不改既有行为）。
         const nemesis = c.relations.find((r) => r.kind === "enemy" && r.bond >= 30);
-        if (nemesis && rngForNext(state, "explore:ambush").chance(0.3)) {
+        if (!c.pendingEvent && nemesis && rngForNext(state, "explore:ambush").chance(0.3)) {
           // U-563：寻仇难度公式出自检定配置表（checks.ts 的 AMBUSH_CHECK）。
           const dc = ambushDcFor(c.realmIdx, nemesis.bond);
           c.pendingEvent = {
@@ -527,6 +662,10 @@ export const playActions = {
             maybeDropTechniquePage(state);
             maybeDropOre(state);
             maybeDropArtifact(state);
+          } else if (maybePresentResonanceEncounter(state)) {
+            // U-416：四象共鸣牵引——本程普通探索被替换为共鸣奇遇
+            //（待决事件已摆好），不踏路线；未命中替换时照旧走下
+            // 方路线分支。
           } else {
             // U-381 分叉地图路线选择：普通探索不再直接抽事件——寻仇与
             // 遗藏两支优先触发都落空后，改为踏上分叉路线（共 5 层、每
@@ -541,6 +680,153 @@ export const playActions = {
         }
       }
 
+      await saveState(ctx, state);
+      return toResponse(state);
+    },
+  }),
+
+  tribulation: defineAction({
+    description: "渡劫仪式推进（U-415）：大境界突破判定成功后进入渡劫三段——face 迎劫（雷劫来临叙事段 → 渡劫战段）、fight 迎战雷劫化身（按目标境界配表的化身，走 Q34 斗法 d20 链，败北伤势照常但不致死、不触发任何惩罚链）、conclude 领受劫果（劫后结算：胜则正式升境并在此刻消耗破境丹 1 颗，败则退回本境大圆满、修为全额退回、破境丹不消耗、连败保底按进入渡劫前快照不变）；三段都不另耗月份与行动点（成本已含在突破动作里），渡劫状态进存档可中断续走，未了结前其他动作按待决口径一律拦截。",
+    request: z.object({ step: z.enum(["face", "fight", "conclude"]) }),
+    response: stateResponse,
+    async handler(ctx, args): Promise<StateResponse> {
+      const state = await loadState(ctx);
+      const c = state.character;
+      if (!c || c.dead || !c.tribulation) return toResponse(state);
+      const trib = c.tribulation;
+      const def = tribulationFor(trib.targetRealmIdx);
+      const targetName = realmsFor(state.settings)[trib.targetRealmIdx]?.name ?? "";
+      if (args.step === "face") {
+        if (trib.phase !== "arrival" || !def) return toResponse(state);
+        trib.phase = "battle";
+        pushLog(state, c.lifeNo, "event", `⚡ 迎劫：你立于雷海正中，抬头直面「${def.name}」——退无可退，唯有一战。胜之，${targetName}境门为你而开；败了，也不过退回大圆满，雷劫不取你性命。`);
+      } else if (args.step === "fight") {
+        if (trib.phase !== "battle") return toResponse(state);
+        settleTribulationFight(state);
+      } else {
+        if (trib.phase !== "settle") return toResponse(state);
+        concludeTribulation(state);
+      }
+      await saveState(ctx, state);
+      return toResponse(state);
+    },
+  }),
+
+  randomExplore: defineAction({
+    description: "随机探索（U-402）：远征/探秘/试炼塔三类通用随机探索，不绑定任何地点、无境界门槛——点入即一次探索行动，耗时与地点探索同为 3 个月（细时钟 explore 键），从该类独立事件子池（每类 8 桩）抽一桩摆成待决事件，走既有 chooseOption 结算（Q34 探索 d80、U-377 代价选项照常、难度按机缘档位随境界缩放）；产出只有普通资源（远征偏灵石、探秘附赠矿石/残页/丹药等已有材料、试炼塔偏修为），不给传承点、不掉法宝；与地点探索互不干扰：不掷地点密度、不占隐藏埋点、不动 U-401 三界秘境槽位，结算不挂地点掉落尾巴；待决事件未决或路线进行中时不受理。",
+    request: z.object({ mode: z.enum(["expedition", "delve", "tower"]) }),
+    response: stateResponse,
+    async handler(ctx, args): Promise<StateResponse> {
+      const state = await loadState(ctx);
+      const c = state.character;
+      if (!c || c.dead) return toResponse(state);
+      // 待决事件未决时照旧拦截（与其他动作同一口径，明示原因）。
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
+      // 路线进行中同样不受理（与 act 同口径：先走完路线或收程）。
+      if (c.route) return toResponse(state);
+      // U-409：随机探索与地点探索同属探索类，耗行动点 10（配置
+      // 表）——抽事件之前扣点；点数不足明示原因、不抽不耗时。
+      if (!spendActionPoints(state, "explore")) { await saveState(ctx, state); return toResponse(state); }
+      const mode = randomExploreModeById(args.mode);
+      const ev = drawRandomExploreEvent(state, args.mode);
+      if (!mode || !ev) return toResponse(state);
+      // 耗时与地点探索同键（time-costs 的 explore = 3 月）：出门
+      // 历练本身耗时，先推进时钟再摆事件；事件抉择结算不再另计
+      // 耗时（与地点探索逐字同口径）。
+      advanceActionMonths(state, "explore");
+      pushLog(state, c.lifeNo, "event", `随机探索 · ${mode.label}：这一程不问目的地，只循着心意走——耗时 3 个月。`);
+      presentDrawnEvent(state, c, ev);
+      await saveState(ctx, state);
+      return toResponse(state);
+    },
+  }),
+
+  startGrid: defineAction({
+    description: "翻格开局（U-412）：开一局 3×3 覆面棋盘 = 一次探索行动，耗 3 个月 + 探索类行动点 10 点（与地点探索同键 explore、与 U-409 口径一致），九格类型在战斗/机缘/休整/狩猎/突破五类中按配置权重随机分布、发牌即定死并存档；已有未翻完的棋盘时不开新局（先翻完或收局），已有待决事件未决时不受理；本局翻完（9 格全翻）后可直接再开新局覆盖。",
+    request: z.object({}),
+    response: stateResponse,
+    async handler(ctx): Promise<StateResponse> {
+      const state = await loadState(ctx);
+      const c = state.character;
+      if (!c || c.dead) return toResponse(state);
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
+      // 已有未翻完的棋盘：不开新局（成本已付、棋盘保留续翻）。
+      if (c.gridBoard && c.gridBoard.cells.some((x) => !x.flipped)) {
+        pushLog(state, c.lifeNo, "hint", "已有一局翻格未收：先把这局翻完，或收局之后再开新局。");
+        await saveState(ctx, state);
+        return toResponse(state);
+      }
+      // U-409：开局与地点探索同属探索类，耗行动点 10（配置表）
+      // ——发牌之前扣点；点数不足明示原因、不发牌不耗时。
+      if (!spendActionPoints(state, "explore")) { await saveState(ctx, state); return toResponse(state); }
+      c.gridBoard = dealGridBoard(state);
+      // 耗时与地点探索同键（time-costs 的 explore = 3 月）：开局
+      // 本身耗时，翻格不再另计（与随机探索逐字同口径）。
+      advanceActionMonths(state, "explore");
+      pushLog(state, c.lifeNo, "event", `翻格开局 · ${gridChapterFor(c.realmIdx)}：一方 3×3 的覆面棋盘在眼前铺开——九格之下，战斗、机缘、休整、狩猎、突破，各藏其一（耗时 3 个月）。翻哪一格，先由你定。`);
+      checkDeath(state, "翻格开局途中寿元耗尽");
+      await saveState(ctx, state);
+      return toResponse(state);
+    },
+  }),
+
+  flipGridCell: defineAction({
+    description: "翻格（U-412）：翻开棋盘上指定的一格——亮出格子类型与一句对应类型的短诗，并触发一桩对应事件：优先从现有事件池按类型过滤抽取（战斗/机缘/休整/狩猎/突破，分类只读事件内容），走既有待决事件卡 + chooseOption 结算（Q34 探索 d80、U-377 代价照常），某类在事件池中无可过滤项时用该类型的专属兜底小事件；翻格本身不另耗月份/行动点（开局已付）；已有待决事件未决或正在分叉路线上时不受理；翻格事件不挂地点探索尾部钩子、不掷地点密度、不占隐藏埋点、不动 U-401 秘境槽位。",
+    request: z.object({ cellIdx: z.number().int().min(0).max(8) }),
+    response: stateResponse,
+    async handler(ctx, args): Promise<StateResponse> {
+      const state = await loadState(ctx);
+      const c = state.character;
+      if (!c || c.dead) return toResponse(state);
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
+      // 路线进行中不受理：路线事件与翻格事件同走待决链，混排会
+      // 让 chooseOption 的路线推进钩子误进一层（与年度事件排队
+      // 同理）——先走完这一程或收程再来翻格。
+      if (c.route) {
+        pushLog(state, c.lifeNo, "hint", "正在分叉路线上：先走完这一程或收程，再来翻格。");
+        await saveState(ctx, state);
+        return toResponse(state);
+      }
+      const board = c.gridBoard;
+      const cell = board?.cells[args.cellIdx];
+      if (!board || !cell) {
+        pushLog(state, c.lifeNo, "hint", "眼下没有进行中的翻格棋盘：先开一局再来翻格。");
+        await saveState(ctx, state);
+        return toResponse(state);
+      }
+      if (cell.flipped) {
+        pushLog(state, c.lifeNo, "hint", "这一格已经翻开过了，换一格试试。");
+        await saveState(ctx, state);
+        return toResponse(state);
+      }
+      // 先落翻开状态再摆事件：事件未决期间棋盘如实显示此格已翻
+      //（待决拦截保证它不会被重复翻），结算与否不回滚翻格。
+      cell.flipped = true;
+      const label = GRID_CELL_LABELS[cell.type] ?? cell.type;
+      const flippedCount = board.cells.filter((x) => x.flipped).length;
+      pushLog(state, c.lifeNo, "event", `翻开一格 · ${label}格（第 ${flippedCount}/9 格）：「${cell.poem}」`);
+      const ev = drawGridEvent(state, cell.type);
+      if (ev) presentGridEvent(state, ev, cell.type);
+      if (flippedCount >= 9) {
+        pushLog(state, c.lifeNo, "event", "九格尽翻，本局翻格就此翻完——收局，或再开一局新的棋盘。");
+      }
+      await saveState(ctx, state);
+      return toResponse(state);
+    },
+  }),
+
+  closeGrid: defineAction({
+    description: "翻格收局（U-412）：主动结束当前进行中的棋盘——已付的开局成本（3 个月 + 10 行动点）不退、已翻格的结算分毫不动，无任何惩罚；收局后可再开新局。无进行中棋盘时无操作。",
+    request: z.object({}),
+    response: stateResponse,
+    async handler(ctx): Promise<StateResponse> {
+      const state = await loadState(ctx);
+      const c = state.character;
+      if (!c || c.dead) return toResponse(state);
+      if (!c.gridBoard) return toResponse(state);
+      const flippedCount = c.gridBoard.cells.filter((x) => x.flipped).length;
+      c.gridBoard = null;
+      pushLog(state, c.lifeNo, "event", `翻格收局：这一局翻了 ${flippedCount}/9 格，就此收起棋盘——开局的成本不退，翻过的际遇都已落袋，无任何惩罚。`);
       await saveState(ctx, state);
       return toResponse(state);
     },
@@ -574,6 +860,9 @@ export const playActions = {
         if (!rank) pushLog(state, c.lifeNo, "hint", "尚未拜入宗门，接不了宗门差事——先去青云山门拜入。");
         else if (c.locationId !== "sect") pushLog(state, c.lifeNo, "hint", "宗门差事要在青云山门接取——你现在不在山门。");
         if (!rank || c.locationId !== "sect") { await saveState(ctx, state); return toResponse(state); }
+        // U-409：宗门差事耗行动点 12（配置表）——守卫已过、真正
+        // 办差之前扣点；点数不足明示原因、不掷骰不耗时。
+        if (!spendActionPoints(state, "sectChore")) { await saveState(ctx, state); return toResponse(state); }
         const dbl = c.talentIds.includes("t_sect") ? 2 : 1;
         // Q34：宗门差事系统骰面 d50（下限随宗门位阶、上限随体魄）。
         const roll = rollCheck(state, c, SKILL_CHECKS.sectChore.attr, SKILL_CHECKS.sectChore.dc, 0, [], "normal", { system: "sect" });
@@ -606,6 +895,8 @@ export const playActions = {
         bumpCommissions(state, "sectChore", c.locationId);
         // U-389：同一回差事同样推进「差事」类限时帖进度。
         bumpTimedEvents(state, "sectChore", c.locationId);
+        // U-407：同一回差事同样推进连环任务当前阶段的「差事」目标。
+        bumpQuests(state, "sectChore", { locationId: c.locationId });
         // U-384：宗门差事同属经营日常，结算后同样按概率触发随机事件。
         maybeTriggerDailyEvent(state);
       }
@@ -663,7 +954,7 @@ export const playActions = {
   }),
 
   chooseOption: defineAction({
-    description: "在当前事件中选择一个选项：带代价的选项（U-377 模板）先复核可付性并精确扣代价（付不起则不结算），再按 Q34 探索骰 d80[下限~上限]+修正 vs 难度（难度以待决选项为准，含机缘档位上调）检定并结算成败；带 loop 标记的选项（U-378 见好就收模板）成功后进入「继续加圈/见好就收」抉择待决事件，加圈按配置比例同涨难度与收益、撤退按累计收获结算；U-381 路线商店卡（route:shop）按 Q17 同价买丹或离开，结算后推进路线一层，路线事件结算完毕同样推进一层；日常委托（U-390）触发的事件掷骰成功即办妥，当场额外结清日常奖励（稀有材料/前世线索），失败不结、委托仍可再触发。",
+    description: "在当前事件中选择一个选项：带代价的选项（U-377 模板）先复核可付性并精确扣代价（付不起则不结算），再按 Q34 探索骰 d80[下限~上限]+修正 vs 难度（难度以待决选项为准，含机缘档位上调）检定并结算成败；带 loop 标记的选项（U-378 见好就收模板）成功后进入「继续加圈/见好就收」抉择待决事件，加圈按配置比例同涨难度与收益、撤退按累计收获结算；U-381 路线商店卡（route:shop）按 Q17 同价买丹或离开，结算后推进路线一层，路线事件结算完毕同样推进一层；日常委托（U-390）触发的事件掷骰成功即办妥，当场额外结清日常奖励（稀有材料/前世线索），失败不结、委托仍可再触发；年度事件（U-410，待决事件带 annual 标记）同走本链结算，了结后补记「第 N 年 · 年度事件了结」日志并跳过地点口径的结算尾巴（不绑地点），排队中的年度事件在本次落盘时紧接着补呈现；共鸣奇遇（U-416，待决事件带 resonance 标记）同走本链结算并跳过地点尾巴，灵力暴走走 U-416 专属分支：同链判定结算，但气血损失钳制不致死、绝不调 checkDeath（不触发死亡/轮回/走火入魔死亡口径/记忆规则），结算后留下灵力紊乱 debuff（持续配置月数、修炼收益按配置打折、到期自动消散）。",
     request: z.object({ optionIdx: z.number().int().min(0).max(5) }),
     response: stateResponse,
     async handler(ctx, args): Promise<StateResponse> {
@@ -809,6 +1100,10 @@ export const playActions = {
       // 保留。每圈只呈现这一次抉择，抉择本身不掷骰、不耗时。
       if (pending.id.startsWith("loop:")) {
         const loop = pending.loop;
+        // U-410：年度事件的加圈抉择继承年度标记（见主分支构建
+        // 处）——收手与加圈失败了结时补记年度了结日志，继续加圈
+        // 时把标记传给下一圈的抉择待决事件。
+        const annualMark = pending.annual;
         const ev = loop ? EVENTS.find((e) => e.id === loop.eventId) : undefined;
         const opt = ev?.options[loop?.optionIdx ?? -1];
         if (!loop || !ev || !opt) { c.pendingEvent = null; await saveState(ctx, state); return toResponse(state); }
@@ -816,11 +1111,14 @@ export const playActions = {
           const gainsText = formatEffectGains(loop.gains) || "无";
           c.lastRoll = { label: `${ev.title}·见好就收`, dice: 0, bonus: 0, total: 0, dc: 0, success: true, text: `见好就收，抽身而退。这一趟共探 ${loop.round} 圈，收获 ${gainsText}，全数落袋。` };
           pushLog(state, c.lifeNo, "event_ok", `${ev.title}——见好就收：探到第 ${loop.round} 圈收手，累计收获 ${gainsText} 全部保留。`);
+          if (annualMark) pushLog(state, c.lifeNo, "event_ok", `📅 第 ${annualMark.year} 年 · 年度事件了结：「${ev.title}」${annualMark.grand ? "（年度大事件）" : ""}——这一年的际遇就此翻篇。`);
           bumpGroupCount(c);
           // U-388：这桩际遇在本地点结算完毕，推进「探索」类委托进度。
           bumpCommissions(state, "explore", c.locationId);
           // U-389：同一桩际遇同样推进「探索」类限时帖进度。
           bumpTimedEvents(state, "explore", c.locationId);
+          // U-407：同一桩际遇同样推进连环任务当前阶段的「探索」目标。
+          bumpQuests(state, "explore", { locationId: c.locationId });
           c.pendingEvent = null;
           // U-381：路线事件至此结算完毕，推进路线一层（无路线时 no-op）。
           finishRouteStep(state, c);
@@ -841,16 +1139,20 @@ export const playActions = {
           c.lastRoll = { label: `${ev.title}·${opt.label} 第${round}圈`, dice: roll.dice, bonus: roll.bonus, total: roll.total, dc: roll.dc, success: true, text: opt.okText, detail: roll.detail };
           pushLog(state, c.lifeNo, "event_ok", `${ev.title}——${opt.label}第 ${round} 圈（难度与收益 ×${multText(round)}；判定明细：${roll.detail.text}）：${opt.okText} 本圈落袋 ${formatEffectGains(roundGains) || "无"}，累计 ${formatEffectGains(gains) || "无"}——继续加圈，还是见好就收？`);
           c.pendingEvent = loopDecisionEvent(ev, opt, { ...loop, round, gains });
+          if (annualMark) c.pendingEvent.annual = annualMark;
           checkDeath(state, `陨落于「${ev.title}」`);
           if (c.dead) { c.pendingEvent = null; c.route = null; }
         } else {
           c.lastRoll = { label: `${ev.title}·${opt.label} 第${round}圈`, dice: roll.dice, bonus: roll.bonus, total: roll.total, dc: roll.dc, success: false, text: opt.failText, detail: roll.detail };
           pushLog(state, c.lifeNo, "event_fail", `${ev.title}——${opt.label}第 ${round} 圈（难度与收益 ×${multText(round)}；判定明细：${roll.detail.text}）：${opt.failText} 这一趟止步于此；先前 ${loop.round} 圈的收获 ${formatEffectGains(loop.gains) || "无"} 早已落袋，不受影响。`);
+          if (annualMark) pushLog(state, c.lifeNo, "event_fail", `📅 第 ${annualMark.year} 年 · 年度事件了结：「${ev.title}」${annualMark.grand ? "（年度大事件）" : ""}——这一年的际遇就此翻篇。`);
           bumpGroupCount(c);
           // U-388：这桩际遇在本地点结算完毕，推进「探索」类委托进度。
           bumpCommissions(state, "explore", c.locationId);
           // U-389：同一桩际遇同样推进「探索」类限时帖进度。
           bumpTimedEvents(state, "explore", c.locationId);
+          // U-407：同一桩际遇同样推进连环任务当前阶段的「探索」目标。
+          bumpQuests(state, "explore", { locationId: c.locationId });
           c.pendingEvent = null;
           checkDeath(state, `陨落于「${ev.title}」`);
           // U-381：路线事件至此结算完毕，推进路线一层（无路线时 no-op）。
@@ -860,9 +1162,71 @@ export const playActions = {
         return toResponse(state);
       }
 
-      const ev = EVENTS.find((e) => e.id === pending.id);
+      // U-416 灵力暴走：走专属结算分支——判定链与普通事件同一
+      // 条（Q34 探索 d80、U-377 代价照常），但守三条 U-416 红
+      // 线：① 气血损失钳制不致死（结算后气血至少余 1）；② 绝
+      // 不调 checkDeath——暴走不触发死亡 / 轮回 / Q35 走火入魔
+      // 死亡口径 / 记忆规则中的任何一条；③ 结算后留下「灵力紊
+      // 乱」debuff（到期月份 = 当前累计月份 + 配置 disorder-
+      // Months，期间修炼收益按配置打折，到期由 advanceMonths
+      // 的 settleResonanceDisorder 自动消散）。暴走不绑地点：
+      // 不推进地点口径的委托 / 限时帖 / 连环任务、不挂地点结算
+      // 尾巴（整段先于主分支返回）。
+      if (pending.resonance?.kind === "rampage") {
+        const ev = RAMPAGE_EVENT_DEF;
+        const opt = ev.options[args.optionIdx];
+        if (!opt) return toResponse(state);
+        const optCost = pending.options[args.optionIdx]?.cost;
+        let costNote = "";
+        if (optCost) {
+          if (eventCostBlockReason(c, optCost)) return toResponse(state);
+          applyEventCost(state, optCost);
+          costNote = `先付代价（${formatEventCost(optCost)}），`;
+        }
+        const optDc = pending.options[args.optionIdx]?.dc ?? opt.dc;
+        const roll = rollCheck(state, c, opt.attr, optDc, eventBonusFor(c, ev), [], "normal", { system: "explore" });
+        const success = optDc <= 0 ? true : roll.success;
+        applyEffects(state, success ? opt.ok : opt.fail, { decayed: success });
+        // 红线①：气血钳制——暴走伤得再重，也留一口气在。
+        if (c.hp < 1) c.hp = 1;
+        // 红线③：紊乱 debuff 落盘（只落到期月份，状态本身不存）。
+        c.resonanceDisorderUntil = c.totalMonths + RESONANCE.disorderMonths;
+        const text = success ? opt.okText : opt.failText;
+        c.lastRoll = { label: `${ev.title}·${opt.label}`, dice: optDc > 0 ? roll.dice : 0, bonus: optDc > 0 ? roll.bonus : 0, total: optDc > 0 ? roll.total : 0, dc: optDc > 0 ? roll.dc : 0, success, text, ...(optDc > 0 ? { detail: roll.detail } : {}) };
+        pushLog(state, c.lifeNo, success ? "event_ok" : "event_fail", `${ev.title}——${opt.label}（判定明细：${roll.detail.text}）：${costNote}${text}`);
+        pushLog(state, c.lifeNo, "event", `🌀 灵力紊乱：暴走虽平，经脉里的乱流还得养 ${RESONANCE.disorderMonths} 个月——紊乱期间修炼收益 −${RESONANCE.disorderCultivatePenaltyPct}%，到期自动消散。这只是体内的小劫：不伤寿元、不动记忆、不涉轮回。`);
+        c.pendingEvent = null;
+        await saveState(ctx, state);
+        return toResponse(state);
+      }
+
+      // U-402：待决事件也可能来自随机探索的模式子池（远征/探秘/
+      // 试炼塔）——先查地点事件池、再查模式池，两池 id 经配置自
+      // 检互不撞车，查到哪桩就按哪桩的选项结算，链路同一条。
+      // U-410：年度事件的个人事件本就在 EVENTS 里（同一查表命
+      // 中）；年度大事件在年度小池里，作第三查。
+      // U-412：翻格事件主池抽的本就在 EVENTS 里（同一查表命
+      // 中）；兜底小事件在翻格专属小池里，作第四查。
+      // U-416：共鸣奇遇在共鸣专属小池里，作第五查（暴走事件不
+      // 走本查——已在上方专属分支结算）。
+      const ev = EVENTS.find((e) => e.id === pending.id) ?? randomExploreEventById(pending.id) ?? annualEventById(pending.id) ?? gridFallbackEventById(pending.id) ?? resonanceEventById(pending.id);
       const opt = ev?.options[args.optionIdx];
       if (!ev || !opt) return toResponse(state);
+      const isModeEvent = isRandomExploreEventId(pending.id);
+      // U-410：年度事件标记（个人/大事件同）：结算后补记了结日
+      // 志，且与模式事件同口径跳过地点结算尾巴（年度事件不绑地
+      // 点——不推进地点口径的委托/限时帖/连环任务、不结日常委
+      // 托、不挂残页/拾矿/法宝三掷）。
+      const annualMark = pending.annual;
+      // U-412：翻格标记——翻格事件与年度事件同口径跳过地点结算
+      // 尾巴（不绑地点：不推进地点口径的委托/限时帖/连环任务、
+      // 不结日常委托、不挂残页/拾矿/法宝三掷）。翻格主池事件经
+      // 配置分类排除带 loop 选项者，故不会进上方加圈链。
+      const gridMark = pending.grid;
+      // U-416：共鸣标记——共鸣奇遇与年度 / 翻格事件同口径跳过
+      // 地点结算尾巴（不绑地点），了结后补记一条共鸣了结日志。
+      //（暴走已在上方专属分支返回，走不到这里。）
+      const resonanceMark = pending.resonance;
       // U-377 代价模板：标价以待决选项里的 cost 为准（与玩家看到的
       // 一致）。付不起 → 选项不可选：整次选择不结算、事件仍待决，
       // 状态原样返回（客户端已禁用该选项并明示原因，这里是服务端
@@ -910,6 +1274,9 @@ export const playActions = {
         c.lastRoll = { label: `${ev.title}·${opt.label}`, dice: optDc > 0 ? roll.dice : 0, bonus: optDc > 0 ? roll.bonus : 0, total: optDc > 0 ? roll.total : 0, dc: optDc > 0 ? roll.dc : 0, success: true, text, ...(optDc > 0 ? { detail: roll.detail } : {}) };
         pushLog(state, c.lifeNo, "event_ok", `${ev.title}——${opt.label}第 1 圈（判定明细：${roll.detail.text}）：${costNote}${text} 本圈落袋 ${formatEffectGains(gains) || "无"}——继续加圈（难度与收益同涨），还是见好就收？`);
         c.pendingEvent = loopDecisionEvent(ev, opt, { eventId: ev.id, optionIdx: args.optionIdx, round: 1, baseDc: optDc, gains });
+        // U-410：年度事件若带加圈选项，抉择待决事件继承年度标
+        // 记——收手/失败了结时照样补记年度了结日志。
+        if (annualMark) c.pendingEvent.annual = annualMark;
         checkDeath(state, `陨落于「${ev.title}」`);
         if (c.dead) { c.pendingEvent = null; c.route = null; }
         await saveState(ctx, state);
@@ -922,7 +1289,18 @@ export const playActions = {
       c.lastRoll = { label: `${ev.title}·${opt.label}`, dice: optDc > 0 ? roll.dice : 0, bonus: optDc > 0 ? roll.bonus : 0, total: optDc > 0 ? roll.total : 0, dc: optDc > 0 ? roll.dc : 0, success, text, ...(optDc > 0 ? { detail: roll.detail } : {}) };
       pushLog(state, c.lifeNo, success ? "event_ok" : "event_fail",
         optDc > 0 ? `${ev.title}——${opt.label}（判定明细：${roll.detail.text}）：${costNote}${text}` : `${ev.title}——${opt.label}：${costNote}${text}`);
+      // U-410：年度事件了结补记（标明年份，与触发日志成对）——
+      // 这一年的际遇就此翻篇，下一个跨年再排下一桩。
+      if (annualMark) pushLog(state, c.lifeNo, success ? "event_ok" : "event_fail", `📅 第 ${annualMark.year} 年 · 年度事件了结：「${ev.title}」${annualMark.grand ? "（年度大事件）" : ""}——这一年的际遇就此翻篇。`);
+      // U-416：共鸣奇遇了结补记（与触发日志成对）。
+      if (resonanceMark?.kind === "encounter") pushLog(state, c.lifeNo, success ? "event_ok" : "event_fail", `✨ 共鸣奇遇了结：「${ev.title}」——四象调和的际遇就此翻篇。`);
       bumpGroupCount(c);
+      // U-402：模式探索（远征/探秘/试炼塔）的际遇不绑地点——不推
+      // 进地点口径的委托/限时帖进度、不结日常委托（模式事件永不
+      // 带 daily 标记）、不挂地点探索尾部的残页/拾矿/法宝掉落三
+      // 掷（模式池自带材料产出，见下方附赠结算）；地点事件的结算
+      // 尾巴与改前逐字一致，只在 isModeEvent 时整段跳过。
+      if (!isModeEvent && !annualMark && !gridMark && !resonanceMark) {
       // U-388：这桩际遇在本地点结算完毕，推进「探索」类委托进度
       // （路线事件节点与 U-384 日常触发的事件同走本分支，一并计入；
       // 既有结算数值不变）。
@@ -930,6 +1308,9 @@ export const playActions = {
       // U-389：同一桩际遇同样推进「探索」类限时帖进度（与委托并行
       // 计数、互不影响；路线事件与日常触发事件同走本分支，一并计入）。
       bumpTimedEvents(state, "explore", c.locationId);
+      // U-407：同一桩际遇同样推进连环任务当前阶段的「探索」目标
+      // （与委托/限时帖并行计数、互不影响）。
+      bumpQuests(state, "explore", { locationId: c.locationId });
       // U-390：这桩际遇若是本批日常委托触发的（pending.daily 标
       // 记），掷骰成功即算办妥——当场结清日常委托的额外奖励（稀
       // 有材料/前世线索，走既有字段，见 completeDailyCommission）；
@@ -955,6 +1336,14 @@ export const playActions = {
       // 封、槽已占折作），见 state.ts 的 maybeDropArtifact 与
       // content/artifact-sources.json。
       if (success) maybeDropArtifact(state);
+      }
+      // U-402：模式际遇（远征/探秘/试炼塔）掷骰成功时，按配置表
+      // 结算所选选项的材料附赠（探秘的材料产出走这里——矿石/残
+      // 页/丹药，不走上方地点掉落尾巴）；失败不发附赠。
+      if (isModeEvent && success) {
+        const grant = randomExploreGrantFor(ev.id, args.optionIdx);
+        if (grant) settleRandomExploreGrant(state, grant);
+      }
       c.pendingEvent = null;
       checkDeath(state, `陨落于「${ev.title}」`);
       // U-381：路线事件至此结算完毕，推进路线一层（无路线时 no-op；
@@ -1071,11 +1460,17 @@ export const playActions = {
       const loc = locById(args.locationId);
       if (!loc || loc.id === c.locationId) return toResponse(state);
       if (!locUnlocked(c, loc)) return toResponse(state);
+      // U-409：旅行耗行动点 4（配置表）——启程之前扣点；点数不
+      // 足明示原因、原地不动、不推进时钟。
+      if (!spendActionPoints(state, "travel")) { await saveState(ctx, state); return toResponse(state); }
       c.locationId = loc.id;
       // U-608：旅行耗时按目的地查细时钟配置表（travelMonths，1–6 月）。
       advanceTravelMonths(state, loc.id);
       pushLog(state, c.lifeNo, "travel", `启程前往「${loc.name}」，耗时 ${travelMonthsTo(loc.id)} 个月。`);
       checkDeath(state, "赶路途中寿元耗尽");
+      // U-407：旅行抵达，推进连环任务当前阶段的「抵达」目标（途
+      // 中寿终则 bumpQuests 自行跳过；抵达地点以新地点为准）。
+      if (!c.dead) bumpQuests(state, "arrive", { locationId: loc.id });
       // U-391 地点签到「到达即触发」：抵达的地点若是签到点（坊市/
       // 山门/秘境）且本世未签过，当场签到发大奖（settleSignInHere，
       // 即到即得、无接取无时限无掷骰）并记入跨世签到图鉴；本世已
@@ -1303,6 +1698,10 @@ export const playActions = {
         await saveState(ctx, state);
         return toResponse(state);
       }
+      // U-409：锻造同属副职动作，耗行动点 12（配置表 craft）——
+      // 全部门槛与代价可付性都已核过、真正开炉之前扣点；点数
+      // 不足明示原因，矿石与灵石分毫不动。
+      if (!spendActionPoints(state, "craft")) { await saveState(ctx, state); return toResponse(state); }
       // 代价先付：矿石 1 块 + 灵石，成败都不退（失败 = 矿石报废，
       // 灵石是开炉耗材；不扣寿元——U-499 的走火惩罚是另一项）。
       c.ores[tier.id] = oreCountFor(c, tier.id) - 1;
@@ -1348,6 +1747,8 @@ export const playActions = {
       // 与限时帖进度（与炼器淬胚同一口径）。
       bumpCommissions(state, "craft", c.locationId);
       bumpTimedEvents(state, "craft", c.locationId);
+      // U-407：同一回锻造同样推进连环任务当前阶段的「副职」目标。
+      bumpQuests(state, "craft", { locationId: c.locationId });
       // U-384：锻造结算后同样可能被经营日常随机变故打断。
       maybeTriggerDailyEvent(state);
       await saveState(ctx, state);

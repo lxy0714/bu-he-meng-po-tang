@@ -7,11 +7,11 @@
 
 import { defineAction, z } from "./platform";
 import {
-NPCS, SHOP, caveUpgradeCost, enemyById, shopPrice
+NPCS, SHOP, breakthroughBossFor, caveUpgradeCost, enemyById, shopPrice
 } from "./data";
 import {
-addRelation, advanceActionMonths, activeArtifactFx, applyEffects, checkDeath, decayMult, loadState,
-notePendingEventBlock, pushLog, resolveFight, rngForNext, rollCheck, saveState, weekKeyOf, type GameState,
+addRelation, advanceActionMonths, activeArtifactFx, applyEffects, bumpQuests, checkDeath, decayMult, isMajorBreakthroughNext, loadState,
+notePendingEventBlock, pushLog, realmsFor, resolveFight, rngForNext, rollCheck, saveState, settleBreakthroughBossFight, spendActionPoints, weekKeyOf, type GameState,
 } from "./state";
 import { formatEffectGains, type Effect } from "./events";
 import { stateResponse, toResponse, type StateResponse } from "./respond";
@@ -51,11 +51,58 @@ export const worldActions = {
         await saveState(ctx, state);
         return toResponse(state);
       }
+      // U-409：斗法耗行动点 6（配置表）——守卫已过、交手之前扣
+      // 点，成败都扣；点数不足明示原因、不结算。路线节点战斗与
+      // 秘境 Boss 战走 resolveFight 本体、不经本动作，不另扣点
+      //（那一程探索已在启程时扣过探索点）。
+      if (!spendActionPoints(state, "fight")) { await saveState(ctx, state); return toResponse(state); }
       const wk = weekKeyOf(new Date());
       if (c.weekKey !== wk) { c.weekKey = wk; c.groupCounts = {}; }
       // 结算本体抽到 state.ts 的 resolveFight（与 U-381 路线战斗/精英
       // 节点共用同一结算，数值与文案逐字不变）；本动作只做守卫与周键。
       resolveFight(state, c, enemy);
+      await saveState(ctx, state);
+      return toResponse(state);
+    },
+  }),
+
+  challengeBreakthroughBoss: defineAction({
+    description: "禁地夺丹（U-414）：处于某境大圆满时挑战对应禁地的 Boss（按目标境界配表），按一次斗法行动计（耗 1 个月 + 斗法行动点 6 点，走既有斗法结算），胜则破境丹 +1 入丹药囊、败则无丹可再战；非大圆满时明示原因不结算。",
+    request: z.object({}),
+    response: stateResponse,
+    async handler(ctx): Promise<StateResponse> {
+      const state = await loadState(ctx);
+      const c = state.character;
+      if (!c || c.dead) return toResponse(state);
+      if (notePendingEventBlock(state)) { await saveState(ctx, state); return toResponse(state); }
+      if (c.route) {
+        hint(state, c.lifeNo, "你正在分叉路线上——先走完这一程或收程，再来挑战禁地 Boss。");
+        await saveState(ctx, state);
+        return toResponse(state);
+      }
+      // 资格：下一步即大境界突破（某境大圆满且有下一境）才有对
+      // 应的禁地 Boss；其余情形明示原因、不扣点不结算。
+      if (!isMajorBreakthroughNext(c, state.settings)) {
+        const realms = realmsFor(state.settings);
+        if (c.realmIdx >= realms.length - 1 && c.stageIdx >= 3) {
+          hint(state, c.lifeNo, "你已至此界之巅，再无大境界可破——禁地夺丹当前不需要（破境丹的门槛只拦大境界突破）。");
+        } else {
+          const stageName = ["初期", "中期", "后期", "大圆满"][c.stageIdx] ?? "";
+          hint(state, c.lifeNo, `禁地夺丹当前不需要：你尚在${realms[c.realmIdx]?.name ?? ""}${stageName}，修至大圆满、下一步即大境界突破时，才需备下破境丹、来此挑战对应禁地的 Boss。`);
+        }
+        await saveState(ctx, state);
+        return toResponse(state);
+      }
+      const def = breakthroughBossFor(c.realmIdx + 1);
+      if (!def) return toResponse(state);
+      // U-409/U-608：按一次斗法行动计——斗法行动点 6 点（守卫已
+      // 过、交手之前扣，成败都扣；点数不足明示原因、不结算）；
+      // 耗时 1 个月由 resolveFight 内的 fight 键统一推进。
+      if (!spendActionPoints(state, "fight")) { await saveState(ctx, state); return toResponse(state); }
+      const wk = weekKeyOf(new Date());
+      if (c.weekKey !== wk) { c.weekKey = wk; c.groupCounts = {}; }
+      pushLog(state, c.lifeNo, "fight", `⚔️ 禁地夺丹：你踏入${def.placeName}，直面「${def.name}」——胜之夺破境丹，败了养好伤还能再战。`);
+      settleBreakthroughBossFight(state);
       await saveState(ctx, state);
       return toResponse(state);
     },
@@ -208,6 +255,9 @@ export const worldActions = {
           await saveState(ctx, state);
           return toResponse(state);
         }
+        // U-409：社交动作耗行动点 6（配置表）——真正结识之前扣
+        // 点；点数不足明示原因、不掷骰不耗时。
+        if (!spendActionPoints(state, "social")) { await saveState(ctx, state); return toResponse(state); }
         // U-575：结识人选同走权重表抽取（等权，概率不变）。
         const npc = weighted(rngForNext(state, "social:meet-npc"), uniformTable(pool));
         // U-563：广交道友检定出自检定配置表（SKILL_CHECKS.socialMeet）。
@@ -234,6 +284,21 @@ export const worldActions = {
         await saveState(ctx, state);
         return toResponse(state);
       }
+      // U-409：社交动作耗行动点 6（配置表）——只对真正会执行的
+      // 互动扣点（与下方各分支的执行条件同口径：关系类型匹配、
+      // 赠礼/和解的灵石付得起）；类型不匹配等只给提示的调用不
+      // 扣点。扣点在任何结算之前，成败都扣（赠礼无掷骰、送出
+      // 即扣）。
+      const socialWillRun =
+        args.kind === "visit" ? rel.kind !== "enemy"
+        : args.kind === "dual" ? rel.kind === "partner"
+        : args.kind === "guidance" ? rel.kind === "master"
+        : args.kind === "teach" ? rel.kind === "disciple"
+        : args.kind === "gift" ? c.stones >= 30
+        : args.kind === "duel" ? rel.kind === "enemy"
+        : args.kind === "reconcile" ? rel.kind === "enemy" && c.stones >= 50
+        : false;
+      if (socialWillRun && !spendActionPoints(state, "social")) { await saveState(ctx, state); return toResponse(state); }
       const clampBond = () => { rel.bond = Math.max(0, Math.min(100, rel.bond)); };
 
       if (args.kind === "visit" && rel.kind !== "enemy") {
@@ -256,6 +321,9 @@ export const worldActions = {
         const gainText = formatEffectGains(gains);
         pushLog(state, c.lifeNo, "social", `登门拜访${rel.name}，叙谈半日，情谊 +${gain}（${rel.bond}）。${gainText ? `席间另有所获：${gainText}。` : ""}`);
         advanceActionMonths(state, "social"); // U-608：社交耗时按细时钟配置表（social，配置表定 3 月）
+        // U-407：登门拜访一回，推进连环任务当前阶段的「拜访」目标
+        // （按被访 NPC 匹配；仇敌不可拜访、不在此列）。
+        bumpQuests(state, "visit", { npcId: rel.npcId });
       }
 
       if (args.kind === "dual" && rel.kind === "partner") {

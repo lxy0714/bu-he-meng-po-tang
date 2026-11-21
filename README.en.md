@@ -6,6 +6,8 @@ A single-player reincarnation-cultivation text game. You start as a mortal with 
 
 Ink-wash rice-paper UI · pure TypeScript logic core · all content in JSON config tables
 
+**Current version: v1.2.0** (2026-11-21) · development plan progress 69/627 — see the [Changelog](CHANGELOG.md)
+
 ## Highlights
 
 - **Reincarnation settlement**: reincarnation points granted by each life's grade; only 10% of cultivation carries over; memory retention by manner of death — 30% for dying of old age, 10% in battle, 0% for a violent death (realm bonus capped at 50%)
@@ -13,6 +15,11 @@ Ink-wash rice-paper UI · pure TypeScript logic core · all content in JSON conf
 - **Per-system check dice**: combat d20, breakthrough d100, exploration d80, crafting d60, social d40, sect errands d50 — difficulty scales with the relative gap between your capability and the target tier, so high realms never trivially crush low-tier content
 - **Fine clock**: time flows by month, every action has a time cost, lifespan settles monthly, timed posts count down in days
 - **80 exploration events**: costly choices, press-your-luck loops, three-way choices, dual solutions, moral forks — plus five-layer forked route exploration
+- **Three random-exploration modes**: Expedition (spirit stones), Delving (materials) and the Trial Tower (cultivation), each with its own event pool — plus flip-grid exploration on a 3×3 face-down board of combat / fortune / rest / hunt / breakthrough cells
+- **Yearly action points**: 40 points a year, with per-action costs for cultivating, exploring, breaking through, dueling and more — plan each year's rhythm; resting is always free, and the budget refreshes yearly
+- **Breakthrough pills & tribulation**: major-realm breakthroughs require a Breakthrough Pill (win one from a forbidden-ground guardian boss); a passed check must still survive a three-stage lightning tribulation to ascend — defeat returns you to Perfection, pill kept, and cannot kill
+- **Quest chains & round goals**: three-stage chained side quests under a whole-chain deadline with a chain prize; each round, pick 1 of 3 mini-goals and get paid on completion
+- **Annual events & attribute resonance**: one grand event choice per year; balanced attributes trigger Four-Signs Resonance bonuses, while imbalance risks a mana surge
 - **28 natal treasures**: tiered realm thresholds by functional strength; sealed below threshold, auto-unsealed on reaching it; forgeable, droppable, granted by sect promotions
 - **Management & social**: commission board, timed posts, daily commissions, sign-in codex, sealed-egg collection, past-life buried treasures and a karma to-do list, 12 NPCs with five relationship types
 - **Main storyline "The Past-Life Mystery"**: collect 9 memory shards to piece together who you were

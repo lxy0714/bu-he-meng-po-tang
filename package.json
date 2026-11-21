@@ -27,5 +27,5 @@
     "typecheck": "bun x tsc --noEmit -p client/tsconfig.json && bun x tsc --noEmit -p server/tsconfig.json"
   },
   "type": "module",
-  "version": "1.1.0"
+  "version": "1.2.0"
 }

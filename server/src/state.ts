@@ -5,13 +5,14 @@ import type { Ctx } from "./platform";
 import { GAME_SLOT, saveStorageFor } from "./storage";
 import { applySaveFieldDefaults } from "./savefields";
 import {
-ARTIFACTS, ARTIFACT_SOURCES, CLASSIC_REALMS, COMMISSIONS, CRAFT_SKILLS, CURRENT_EVENT_VERSION, DAILY_COMMISSIONS, ENEMIES, EXPLORE_TUNING, FORGE, LOCATION_DROPS, LOCATIONS, MAINLINE_CHAPTERS, MAINLINE_TOTAL_SHARDS, NO_ROOT_ID, NO_ROOT_STARTER_TECH_ID, SEALED_EGGS, SECRET_REALMS, SECT_RANKS, SHOP, SHORT_REALMS, SIGN_INS, STAGES, TECHNIQUES, TECHNIQUE_MASTERY, TIME_COSTS, TIMED_EVENTS, TREASURES, artifactById, birthBoonById, combatDc, commissionById, craftLevelDefFor, craftProficiencyFor, craftYieldPctFor, dailyCommissionById, defaultHiddenSlots, dropTierDef, eventReleasedForDeck, eventUnlockedForLife, exploreTuningFor, locById, locationDropAt, clampImprint, imprintValuesFor, npcById, sealedEggAtLocation, secretRealmAt, signInByLocation, signInTierDef, techById, techLayerBreakdown, techLayerText, techTotalPoints, techniqueProfGainFor, timeCostMonths, timedEventById, travelMonthsTo,
-type ArtifactDef, type ArtifactFx, type CommissionDef, type DailyCommissionDef, type EnemyDef, type ForgeTierDef, type LocationDef, type RealmDef, type RelKind, type SealedEggDef, type SecretRealmDef, type SignInSpotDef, type TalentDef, type TechDef, type TechniqueProfSource, type TimedEventDef, type TimedRepDelta, type TimeCostKey
+ACTION_POINTS, ACTION_POINT_LABELS, ANNUAL_EVENT_DEFS, ANNUAL_EVENTS, actionYearFor, ARTIFACTS, ARTIFACT_SOURCES, CLASSIC_REALMS, COMMISSIONS, CRAFT_SKILLS, CURRENT_EVENT_VERSION, DAILY_COMMISSIONS, ENEMIES, EXPLORE_TUNING, FORGE, LOCATION_DROPS, LOCATIONS, MAINLINE_CHAPTERS, MAINLINE_TOTAL_SHARDS, NO_ROOT_ID, NO_ROOT_STARTER_TECH_ID, ROUND_GOALS, SEALED_EGGS, SECRET_REALMS, SECT_RANKS, SHOP, SHORT_REALMS, SIGN_INS, STAGES, TECHNIQUES, TECHNIQUE_MASTERY, TIME_COSTS, TIMED_EVENTS, TREASURES, artifactById, birthBoonById, combatDc, commissionById, craftLevelDefFor, craftProficiencyFor, craftYieldPctFor, dailyCommissionById, defaultHiddenSlots, dropTierDef, eventReleasedForDeck, eventUnlockedForLife, exploreTuningFor, locById, locationDropAt, clampImprint, imprintValuesFor, npcById, questById, roundGoalById, randomExploreEventById, randomExploreModeById, sealedEggAtLocation, secretRealmAt, signInByLocation, signInTierDef, techById, techLayerBreakdown, techLayerText, techTotalPoints, techniqueProfGainFor, timeCostMonths, timedEventById, travelMonthsTo,
+GRID_CELL_TYPES, GRID_EXPLORE, RESONANCE, breakthroughBossFor, gridEventPoolFor, gridFallbackEventsFor, gridPoemFor, tribulationFor,
+type ActionPointKey, type ArtifactDef, type ArtifactFx, type BreakthroughBossDef, type CommissionDef, type DailyCommissionDef, type EnemyDef, type ForgeTierDef, type GridCellType, type LocationDef, type QuestDef, type QuestObjectiveKind, type QuestReward, type QuestStageDef, type RandomExploreGrant, type RandomExploreModeId, type RealmDef, type RelKind, type RoundGoalDef, type RoundGoalKind, type SealedEggDef, type SecretRealmDef, type SignInSpotDef, type TalentDef, type TechDef, type TechniqueProfSource, type TimedEventDef, type TimedRepDelta, type TimeCostKey, type TribulationDef
 } from "./data";
-import { ATTR_NAME, EVENTS, formatEffectGains, type Effect, type EventDef } from "./events";
+import { ATTR_NAME, EVENTS, eventCostBlockReason, formatEffectGains, type Effect, type EventDef } from "./events";
 import { SeededRng, makeSeed, randomSet, uniformTable, weighted, weightedDeckCards } from "./rng";
 import { assertModifierChain, assertRollMode, buildCheckDetail, evaluateDiceExpression, runModifiersAfter, runModifiersBefore, type CheckDetail, type CheckModifier, type CheckModifierContext, type ModifierTraceEntry, type RollMode } from "./dice";
-import { CHECK_CONFIG, COMBAT_CHECK, FATE_TIER, artifactBonusFor, checkExpressionFor, craftTalentBonus, cultivationThresholdFor, diceRangeFor, eventTalentBonus, isCheckSuccess, rescaleDc, scaleMargin, talentAttrBonus, type AttrKey, type CheckSystem } from "./checks";
+import { CHECK_CONFIG, COMBAT_CHECK, FATE_TIER, artifactBonusFor, checkExpressionFor, craftTalentBonus, cultivationThresholdFor, diceRangeFor, eventTalentBonus, fateTierBump, isCheckSuccess, rescaleDc, scaleMargin, talentAttrBonus, type AttrKey, type CheckSystem } from "./checks";
 
 // ---------- state model ----------
 
@@ -55,6 +56,41 @@ export interface PendingLoop { eventId: string; optionIdx: number; round: number
 export type RouteNodeType = "combat" | "elite" | "event" | "shop" | "rest";
 export interface RouteNode { type: RouteNodeType; enemyId?: string }
 export interface RouteState { layer: number; totalLayers: number; nodes: RouteNode[] }
+// U-412 每局翻格遇事件：3×3 覆面棋盘的存档形态——cells 恒 9 格
+// （行优先序），每格在发牌时就定下类型（type）与翻开时附的诗句
+// （poem，发牌时按类型轮取定死），flipped 为是否已翻开。类型在
+// 翻开前不下发给客户端（respond 整形时覆面格只给 flipped 标
+// 记，防提前窥牌）。棋盘是本世状态：开局付过成本后一直保留，
+// 中途做别的事不丢；9 格全翻完即本局结束（棋盘保留展示、可收
+// 局或直接再开新局覆盖）；轮回不带走（降生构造点给 null）。
+export interface GridCellState { type: GridCellType; flipped: boolean; poem: string }
+export interface GridBoardState { cells: GridCellState[] }
+// U-415 渡劫仪式进行状态（本世）：大境界突破判定成功后进入、
+// 正式升境（或退回大圆满）后清除。三段 phase：arrival 雷劫来
+// 临（叙事卡，点「迎劫」进 battle）→ battle 渡劫战（点「迎战」
+// 与雷劫化身交手，结算当刻转 settle 并落 won）→ settle 劫后结
+// 算（点「领受劫果」正式了结：胜则升境、败则退回）。target-
+// RealmIdx 为目标境界序号（= 进入时 realmIdx + 1，化身按此查
+// 配置表 tribulation.json）；spentCultivation 为本次突破判定已
+// 扣的修为（need）——渡劫失败时全额退回（定稿：渡劫失败不扣
+// 修为），胜则随升境正式扣定；breakFailsBefore 为判定掷骰前
+// 的连败保底计数快照——判定成功本会由保底 modifier 清零，渡
+// 劫失败时按快照恢复（定稿口径：保底只由突破判定失败推进，
+// 判定成功后的渡劫失败不推进也不清空保底），胜则保持清零
+// （突破至此才真正完成）。渡劫全程按待决状态拦截其他动作
+// （notePendingEventBlock 统一守卫口），状态进存档可中断续走；
+// 旧存档缺失补 null，轮回不带走（降生构造点给 null——陨落前
+// 未了的劫随上一世消散，新世重新冲关重新渡劫）。
+export interface TribulationState {
+  phase: "arrival" | "battle" | "settle";
+  targetRealmIdx: number;
+  spentCultivation: number;
+  breakFailsBefore: number;
+  won: boolean;
+}
+export function emptyGridBoard(): GridBoardState {
+  return { cells: [] };
+}
 export const ROUTE_TOTAL_LAYERS = 5;
 export const ROUTE_NODE_TYPES: readonly RouteNodeType[] = ["combat", "elite", "event", "shop", "rest"];
 
@@ -71,6 +107,41 @@ export interface ActiveCommission { id: string; progress: number; done: boolean 
 export interface CommissionState { board: string[]; active: ActiveCommission[]; completedCount: number }
 export function emptyCommissionState(): CommissionState {
   return { board: [], active: [], completedCount: 0 };
+}
+
+// U-407 多阶段任务模型（通用任务引擎）：任务定义在配置表
+// content/quests.json（QuestDef：多阶段 + 可分支），进度放这里——
+// 每条进行中任务记当前阶段 stageId、阶段内计数 progress、分支选
+// 择 branchChoice（未抉择为 ""）、是否停在分支点 awaitingBranch、
+// 是否全链走完待回板结算 done。任务按世重置（与委托板同口径）：
+// 轮回时未完成任务随新世构造清空，已完成只记进本世 completedIds /
+// completedCount（本世历史，不跨世保留进度）。多任务并行上限 =
+// 配置表 QUESTS.maxActive（3）。可接列表是派生量（未完成、未在进
+// 行中、张贴处与各阶段目标地点都已解锁），不另存板面。旧存档缺
+// 失时由存档字段注册表补空状态。引擎推进在 bumpQuests，动作在
+// actions-quests.ts；U-388/U-389/U-390 三套旧系统不迁移、未动。
+export interface ActiveQuest { id: string; stageId: string; progress: number; branchChoice: string; awaitingBranch: boolean; done: boolean }
+export interface QuestState { active: ActiveQuest[]; completedIds: string[]; completedCount: number }
+export function emptyQuestState(): QuestState {
+  return { active: [], completedIds: [], completedCount: 0 };
+}
+
+// U-408 单轮目标制：每轮从随机给出的候选（配置表 round-goals.json
+// 的 candidateCount 个）里选 1 个当前目标，进度随对应既有动作推
+// 进，完成瞬间发小额额外奖励并可再选新目标；未完成无惩罚，可随
+// 时放弃重选（候选重新随机）。目标只做行为引导——不锁、不拦任
+// 何动作，本引擎不参与任何动作的守卫判定。状态三段：当前目标 id
+// currentId（未选为 ""）、当前进度 progress（stonesGain 类按累计
+// 灵石增量计、其余按次计）、候选 id 列表 candidates（无当前目标
+// 时有效，由读档期 ensureRoundGoalCandidates 补齐；选定/完成/放
+// 弃后重新随机）、本世已完成数 completedCount。定义在配置表
+// content/round-goals.json，推进在 bumpRoundGoal（与 bumpQuests
+// 并行挂在既有结算尾巴上），动作在 actions-goals.ts。目标是本世
+// 的念想，轮回不带走（新世构造给空状态）。旧存档缺失时由存档字
+// 段注册表补空状态。
+export interface RoundGoalState { currentId: string; progress: number; candidates: string[]; completedCount: number }
+export function emptyRoundGoalState(): RoundGoalState {
+  return { currentId: "", progress: 0, candidates: [], completedCount: 0 };
 }
 
 // U-389 限时事件（来源 B-65《修真聊天群》，拆自 v1 U-47 的限时部
@@ -188,6 +259,26 @@ export interface PendingEvent {
   // 托的额外奖励；普通待决事件与旧存档皆缺省，读入不受影响。委托
   // 引用的事件经配置自检不得带 loop 选项，故日常结算不进 loop 链。
   daily?: { dailyId: string; locationId: string };
+  // U-410 年度事件标记：本待决事件由年度事件推演触发时带此字段
+  //（year 为它所属的年份序号、grand 为是否年度大事件）——
+  // chooseOption 据此在结算后补记「第 N 年 · 年度事件了结」日志，
+  // 并跳过地点口径的结算尾巴（年度事件不绑地点，与 U-402 模式事
+  // 件同口径）；客户端据此标注「年度事件 / 年度大事件」。普通待
+  // 决事件与旧存档皆缺省，读入不受影响。
+  annual?: { year: number; grand: boolean };
+  // U-412 翻格标记：本待决事件由翻格触发时带此字段（cellType 为
+  // 翻开的格子类型）——chooseOption 据此跳过地点口径的结算尾巴
+  //（与年度事件同口径：翻格事件不绑地点、不挂地点探索尾部钩
+  // 子）；客户端据此标注「翻格际遇 · X 格」。普通待决事件与旧
+  // 存档皆缺省，读入不受影响。
+  grid?: { cellType: GridCellType };
+  // U-416 共鸣 / 暴走标记：本待决事件由属性共鸣 / 失衡触发时带
+  // 此字段（kind 为 encounter 共鸣奇遇 / rampage 灵力暴走）——
+  // chooseOption 据此走 U-416 口径：共鸣奇遇与年度事件同口径
+  // 跳过地点结算尾巴；暴走走专属分支（气血钳制不致死、结算后
+  // 留下灵力紊乱 debuff、绝不调 checkDeath）。普通待决事件与
+  // 旧存档皆缺省，读入不受影响。
+  resonance?: { kind: "encounter" | "rampage" };
 }
 // U-570：lastRoll 除原有汇总数字外，带一份结构化判定明细（detail，
 // 见 dice.ts 的 CheckDetail）；旧存档的 lastRoll 没有 detail，客户端
@@ -243,6 +334,27 @@ export interface Character {
   // 寿元结算也按它走：寿元上限换算成月（lifespan × monthsPerYear，
   // 见 lifespanMonthsOf），checkDeath 按累计月份判定寿终。
   totalMonths: number;
+  // U-409 年度行动点：actionPoints 为当前年份的剩余点数（年度
+  // 上限与各类耗点在配置表 action-points.json），actionYear 为
+  // 当前年份序号（自降生起算、降生为第 1 年，由累计月份推导，
+  // 见 content.ts 的 actionYearFor）。扣点在各动作开始时经
+  // spendActionPoints 统一走；跨入新的一年由 advanceMonths 的
+  // 年份挂点 settleActionPointYear 回满（余点不结转）；轮回开
+  // 新世由构造点给满池 + 第 1 年。旧存档缺失时由存档字段注册
+  // 表补值：余量按满池、年份按累计月份推导。
+  actionPoints: number;
+  actionYear: number;
+  // U-410 年度事件推演：annualEventYear 为已记账（已排队或已呈
+  // 现）年度事件的最近年份序号——跨年结算据此保证每年恰触发
+  // 一次、同年不叠加；annualEventQueued 为待排队标志：跨年只记
+  // 账排队，呈现统一由 saveState 的落盘挂点在动作收尾时补上
+  //（动作自带的待决事件/路线先行，年度事件随后脚跟呈现，不丢
+  // 失、不覆盖）。旧存档缺失时由存档字段注册表补值：年份按累
+  // 计月份推导为当前年（不补触发过去年份，下一个跨年才开始）、
+  // 排队补 false；轮回开新世由构造点给第 1 年 + false，按新世
+  // 年份重新计。
+  annualEventYear: number;
+  annualEventQueued: boolean;
   might: number; sense: number; fortune: number; body: number;
   sealedMemory: boolean; memoryTier: number; dead: boolean; deathCause: string | null;
   pendingEvent: PendingEvent | null; lastRoll: LastRoll | null;
@@ -250,6 +362,23 @@ export interface Character {
   // 个节点待选（或由节点触发的待决事件正在结算）。旧存档缺失时由
   // 存档字段注册表补 null（无进行中路线），降生时恒为 null。
   route: RouteState | null;
+  // U-412 翻格棋盘进行状态（本世）：非 null 表示有一局未收的棋盘
+  //（3×3 九格、类型与已翻状态，见 GridBoardState）。旧存档缺失
+  // 时由存档字段注册表补 null（无进行中棋盘），降生时恒为 null，
+  // 轮回不带走。
+  gridBoard: GridBoardState | null;
+  // U-415 渡劫仪式进行状态（本世）：非 null 表示正处渡劫三段之
+  // 中（见 TribulationState）。旧存档缺失时由存档字段注册表补
+  // null（无进行中渡劫），降生时恒为 null，轮回不带走。
+  tribulation: TribulationState | null;
+  // U-416 灵力紊乱 debuff 到期月份（本世）：灵力暴走结算后置为
+  // 「当时累计月份 + 配置 disorderMonths」，紊乱生效期间修炼
+  // 收益按配置打折；0 = 无紊乱。共鸣 / 失衡状态本身实时计算
+  // （resonanceStateOf）、不落盘，唯此到期月份需落盘——跨月推
+  // 进时由 settleResonanceDisorder 在到期那一刻记消散日志并清
+  // 零。旧存档缺失时由存档字段注册表补 0（无紊乱），降生时恒
+  // 为 0，轮回不带走。
+  resonanceDisorderUntil: number;
   talentIds: string[]; techniqueId: string | null;
   legacyPoints: number; jadeLayers: number;
   weekKey: string; groupCounts: Record<string, number>;
@@ -273,6 +402,16 @@ export interface Character {
   // 本世已完成数。旧存档缺失时由存档字段注册表补空状态，降生时恒
   // 为空状态（板面在读档/降生后由 ensureCommissionBoard 补齐）。
   commissions: CommissionState;
+  // U-407 连环任务状态（本世）：进行中任务（当前阶段/阶段内计数/
+  // 分支选择/是否待抉择/是否走完待结算）、本世已完成任务 id 与数。
+  // 旧存档缺失时由存档字段注册表补空状态，降生时恒为空状态；可接
+  // 列表由定义与本状态派生（见 questAvailable），不另存板面。
+  quests: QuestState;
+  // U-408 单轮目标状态（本世）：当前目标 id（未选为 ""）、当前进
+  // 度、候选 id 列表、本世已完成数。旧存档缺失时由存档字段注册表
+  // 补空状态，降生时恒为空状态；候选在读档后由 ensureRoundGoal-
+  // Candidates 补齐（无当前目标时）。
+  roundGoal: RoundGoalState;
   // U-389 限时帖状态（本世）：板上挂帖（id + 挂帖时天序）、已接限
   // 时帖（进度 / 是否达成 / 截止天序）、本世办妥 / 失败 / 过期数。
   // 旧存档缺失时由存档字段注册表补空状态，降生时恒为空状态（板面
@@ -589,6 +728,11 @@ export async function loadState(ctx: Ctx): Promise<GameState> {
     // 口径的 batchMonth（当前批次保留、不连刷，见 migrateDailyClock）。
     migrateDailyClock(parsed);
     ensureDailyBoard(parsed);
+    // U-408：单轮目标候选补齐（读档期派生处理，与委托板面同口径：
+    // 无当前目标且候选缺失/失效时种子化随机补足 candidateCount 个
+    // 不重复候选；已有当前目标或候选完好时一字不动，角色已陨落时
+    // 不补——本世目标随轮回清空）。
+    ensureRoundGoalCandidates(parsed);
     // U-618：本命法宝门槛读档对齐——旧存档的持有法宝若未达新门槛，
     // 在此封存（收回加成、法宝保留，日志说明一次）；已达门槛的不受
     // 影响。与其余读档期派生结算同口径：结果随本次读档之后的任一
@@ -641,6 +785,12 @@ export async function loadState(ctx: Ctx): Promise<GameState> {
 // 的事交给存储层；槽位隔离（游戏存档不覆盖报错记录行）由存储层的
 // 行 id 限定保证，见 storage.ts。
 export async function saveState(ctx: Ctx, state: GameState): Promise<void> {
+  // U-410：落盘前先把排队中的年度事件补呈现（待决事件已解决、
+  // 路线已走完时）——chooseOption 结算完待决事件的同一次落盘就
+  // 会把年度事件摆出来，玩家在结算响应里紧接着就能看到，不丢
+  // 不叠（排队标志在呈现当刻清零）。呈现只动内存态，随本次落盘
+  // 一并持久化；无排队时一字不动。
+  presentQueuedAnnualEvent(state);
   // U-574：落盘前把随机流当前位置（种子 + 序号）显式快照进 rngState
   // 一并保存，下次读入时由 restoreRngState 按它恢复（见 loadState）。
   snapshotRngState(state);
@@ -660,7 +810,17 @@ export function pushLog(state: GameState, lifeNo: number, kind: string, text: st
 // 返回 true 表示当前确有待决事件（调用方据此 saveState 后返回）。
 export function notePendingEventBlock(state: GameState): boolean {
   const c = state.character;
-  if (!c || !c.pendingEvent) return false;
+  if (!c) return false;
+  // U-415：渡劫进行中同属待决状态——雷劫未了之前诸事暂停，拦
+  // 截口径与待决事件完全一致（本函数是各动作共用的守卫口，一
+  // 并在此认渡劫，免得每个动作各写一份）。渡劫自身的推进动作
+  //（tribulation）不经本守卫。
+  if (c.tribulation) {
+    const targetName = realmsFor(state.settings)[c.tribulation.targetRealmIdx]?.name ?? "";
+    pushLog(state, c.lifeNo, "hint", `雷劫未了：你正渡${targetName}之劫（${c.tribulation.phase === "arrival" ? "雷劫来临" : c.tribulation.phase === "battle" ? "渡劫战" : "劫后结算"}），先了结此劫，再做其他事。`);
+    return true;
+  }
+  if (!c.pendingEvent) return false;
   pushLog(state, c.lifeNo, "hint", `有待决事件未处理：先处理待决事件「${c.pendingEvent.title}」，了结之后再做这件事。`);
   return true;
 }
@@ -678,7 +838,220 @@ export function advanceMonths(state: GameState, months: number): void {
   if (!c || !Number.isFinite(months) || months === 0) return;
   c.totalMonths += months;
   c.age = Math.floor(c.totalMonths / TIME_COSTS.monthsPerYear);
+  // U-409：年份推进挂点——累计月份跨入新的一年即在此结算年度
+  // 行动点刷新（与年份推导共用同一信号）。本函数是全游戏唯一
+  // 的时间推进口，故刷新只挂这一处：任何动作/效果推进月份都
+  // 必然经过这里，不会漏刷也不会重刷（年份只增、settle 内按
+  // 序号比较）。
+  settleActionPointYear(state);
+  // U-410：年度事件挂同一个跨年挂点，排在行动点刷新之后（定稿
+  // 口径：同一次跨年里先刷新行动点、再排年度事件，互不干扰）。
+  settleAnnualEventYear(state);
+  // U-416：灵力紊乱到期结算挂同一时间推进口——累计月份越过到
+  // 期月份即消散（记一条日志并清零），不依赖任何动作类型。
+  settleResonanceDisorder(state);
 }
+
+// ---------- U-409 年度行动点：年份刷新与扣点 ----------
+// 跨入新的一年：年份序号（actionYearFor 按累计月份推导）变大
+// 时，行动点回满年度上限、余点不结转（不可囤积），并记一条刷
+// 新日志。一次推进跨多年（事件效果加年龄等）也只回满一次、年
+// 份直接对齐到当前年——与 U-611 日常委托「一次跨多月最多刷一
+// 批」同口径。年份不变时一字不动（读档不经本函数、不会误刷）。
+export function settleActionPointYear(state: GameState): void {
+  const c = state.character;
+  if (!c) return;
+  const year = actionYearFor(c.totalMonths);
+  const prev = typeof c.actionYear === "number" && Number.isFinite(c.actionYear) ? c.actionYear : 0;
+  if (year <= prev) return;
+  c.actionYear = year;
+  c.actionPoints = ACTION_POINTS.annualCap;
+  pushLog(state, c.lifeNo, "year", `🌅 跨入第 ${year} 年：行动点回满 ${ACTION_POINTS.annualCap} 点——上一年没花完的点数就此作罢、不结转（行动点每年 ${ACTION_POINTS.annualCap} 点，取舍只在当年）。`);
+}
+
+/** U-409：某类动作的耗点（配置表 action-points.json；键集由 schema 锁死，恒有值）。 */
+export function actionPointCostOf(key: ActionPointKey): number {
+  return ACTION_POINTS.costs[key];
+}
+
+/**
+ * U-409：行动点不足的原因文案（充足或该动作不耗点时为 null）。
+ * 服务端拦截日志与客户端置灰文案共用同一口径：需几点、余几
+ * 点、每年回满、休整不耗点可消磨等来年——绝不静默失败（沿用
+ * U-377 明示口径）。
+ */
+export function actionPointsBlockReason(c: Character, key: ActionPointKey): string | null {
+  const cost = ACTION_POINTS.costs[key];
+  if (cost <= 0) return null;
+  const left = typeof c.actionPoints === "number" && Number.isFinite(c.actionPoints) ? c.actionPoints : 0;
+  if (left >= cost) return null;
+  return `行动点不足：${ACTION_POINT_LABELS[key]}需 ${cost} 点，你只余 ${left} 点（每年 ${ACTION_POINTS.annualCap} 点，跨入新的一年回满、余点不结转）。可先休整消磨时光——休整不耗行动点，等来年刷新再来。`;
+}
+
+/**
+ * U-409：动作开始时扣点（与耗时口径一致：成败都扣，在任何结
+ * 算之前调用）。点数充足（含 0 点动作）→ 扣除并返回 true；不
+ * 足 → 记一条明示原因的提示日志、状态分毫不动、返回 false，
+ * 调用方据此中止动作。扣点只动 actionPoints 一个字段，不改
+ * 任何动作的判定、收益与耗时。
+ */
+export function spendActionPoints(state: GameState, key: ActionPointKey): boolean {
+  const c = state.character;
+  if (!c) return false;
+  const reason = actionPointsBlockReason(c, key);
+  if (reason) {
+    pushLog(state, c.lifeNo, "hint", reason);
+    return false;
+  }
+  c.actionPoints -= ACTION_POINTS.costs[key];
+  return true;
+}
+
+// ---------- U-410 年度事件推演：跨年触发、排队与呈现 ----------
+// 一年一回合：累计月份跨入新的一年（年份序号变大）时，每年恰排
+// 一次年度事件。触发点挂在 advanceMonths 的跨年挂点上、排在
+// U-409 行动点刷新之后（同一次跨年先回满行动点、再排年度事件）。
+// 年度事件不耗月份、不耗行动点（由时间流逝触发）；呈现走既有
+// 待决事件机制（事件卡二选一、chooseOption 按 Q34 探索 d80 结
+// 算、U-377 代价照常），解决前照待决事件老规矩拦其他动作。
+// 呈现时机统一走「先记账排队、落盘时补呈现」：跨年结算只把年
+// 份记账（annualEventYear 推进到当前年——保证每年恰一次、同年
+// 不叠加）并置排队标志，真正的呈现由 saveState 的落盘挂点
+// （presentQueuedAnnualEvent）在本次动作收尾时完成。这样跨年
+// 的动作本身不被打断：动作自带的待决事件（探索寻仇/遗藏、随
+// 机探索、日常委托触发等都在推进月份之后才摆事件）先摆，年度
+// 事件排在其后、等它解决完的同一次落盘立刻补呈现，不丢失、
+// 不覆盖；跨年瞬间正走分叉路线时同理排队（路线中途摆非路线
+// 事件会让 chooseOption 的路线推进钩子误进一层），路线走完/
+// 收程的落盘再补。一次推进跨多年（事件效果加年龄等）与 U-409
+// 同口径：只排一次、记最新年份。
+export function settleAnnualEventYear(state: GameState): void {
+  const c = state.character;
+  if (!c || c.dead) return;
+  const year = actionYearFor(c.totalMonths);
+  const last = typeof c.annualEventYear === "number" && Number.isFinite(c.annualEventYear) ? c.annualEventYear : year;
+  if (year <= last) return;
+  c.annualEventYear = year;
+  c.annualEventQueued = true;
+}
+
+/**
+ * U-410：把某一年的年度事件摆成待决事件。抽池两路（独立种子
+ * 流 annual:kind 先掷类别）：按配置表 annual-events.json 的
+ * grandChancePct 概率出年度大事件（小池 8 桩，种子流 annual:
+ * grand 按 commonality 加权抽一）；其余出个人人生事件——从现
+ * 有全地点事件池 EVENTS 按年抽取（不绑当前地点，种子流
+ * annual:personal 按 commonality 加权；避开最近触发过的 3 个事
+ * 件，沿用现有避重口径，池里其余不够时才放回）。待决事件的构
+ * 建与探索路径同口径：代价复制 + 付不起原因预先算好（U-377）、
+ * 模板标记复制（U-379/U-380/U-383）、Q34 机缘档位上调记在选项
+ * 难度里；另盖 annual 标记（年份 + 是否大事件），chooseOption
+ * 据此补记了结日志并跳过地点结算尾巴。触发只写日志、不动月
+ * 份与行动点。
+ */
+export function presentAnnualEvent(state: GameState, year: number): void {
+  const c = state.character;
+  if (!c || c.dead || c.pendingEvent) return;
+  const grand = rngForNext(state, "annual:kind").chance(ANNUAL_EVENTS.grandChancePct / 100);
+  let ev: EventDef | undefined;
+  if (grand) {
+    ev = weighted(rngForNext(state, "annual:grand"), ANNUAL_EVENT_DEFS.map((e) => ({ value: e, commonality: e.commonality })));
+  } else {
+    const recent = new Set(c.recentEvents);
+    let pool = EVENTS.filter((e) => !recent.has(e.id));
+    if (pool.length === 0) pool = [...EVENTS];
+    ev = weighted(rngForNext(state, "annual:personal"), pool.map((e) => ({ value: e, commonality: e.commonality })));
+  }
+  if (!ev) return;
+  c.recentEvents = [...c.recentEvents, ev.id].slice(-3);
+  c.pendingEvent = {
+    id: ev.id, title: ev.title, desc: ev.desc, art: ev.art,
+    annual: { year, grand },
+    ...(ev.trio ? { trio: true } : {}),
+    ...(ev.dual ? { dual: true } : {}),
+    ...(ev.moral ? { moral: true } : {}),
+    options: ev.options.map((o) => {
+      const base = { label: o.label, hint: o.hint, attr: o.attr, dc: o.dc };
+      const withLoop = o.loop ? { ...base, loop: true } : base;
+      if (!o.cost) return withLoop;
+      const blocked = eventCostBlockReason(c, o.cost);
+      return { ...withLoop, cost: o.cost, ...(blocked ? { costBlocked: blocked } : {}) };
+    }),
+  };
+  // Q34 机缘档位上调与探索路径同口径（记在待决选项难度里）。
+  const fate = fateTierBump(Math.max(0, ...ev.options.map((o) => o.dc)), c.realmIdx, attrOf(c, "fortune"));
+  if (fate.gapSteps > 0 && c.pendingEvent) {
+    for (const o of c.pendingEvent.options) if (o.dc > 0) o.dc += fate.bump;
+    c.pendingEvent.desc += ` ✨ 机缘牵引：此番际遇的档位高出你当前境界约 ${fate.gapSteps} 档——${fate.bump > 0 ? `难度上调 +${fate.bump}，你的气运已抵消其中一部分` : "你的气运正盛，已把境界差带来的难度尽数抵消"}。`;
+  }
+  pushLog(state, c.lifeNo, "event", grand
+    ? `🌐 第 ${year} 年 · 年度大事件：「${ev.title}」——这一年的天地大势不由人躲，际遇已摆在眼前，先了结它再说其他（年度事件不耗月份、不耗行动点）。`
+    : `📅 第 ${year} 年 · 年度事件：「${ev.title}」——新一年的际遇不请自来，与你身在何处无关，先了结它再说其他（年度事件不耗月份、不耗行动点）。`);
+  // 与探索路径同口径：个人事件若恰是某处秘境的专属前置事件且
+  // 人正好在那处，照样惊动隐藏 Boss（noteSecretRealmPrelude 内
+  // 部按地点核对，不在该地点时无副作用）；大事件不在事件池、
+  // 永不命中。
+  noteSecretRealmPrelude(state, ev.id);
+}
+
+/**
+ * U-410：排队年度事件的补呈现（saveState 落盘挂点调用）：排队
+ * 标志在、角色活着、当前无待决事件且不在分叉路线上时，把记账
+ * 年份（annualEventYear）的年度事件立刻摆出来并清排队标志。
+ * 角色已陨落则这一年的排队作罢（新世由构造点重新计年）；其余
+ * 情形（仍有待决/仍在路线）保持排队、下次落盘再试。
+ */
+export function presentQueuedAnnualEvent(state: GameState): void {
+  const c = state.character;
+  if (!c || !c.annualEventQueued) return;
+  if (c.dead) { c.annualEventQueued = false; return; }
+  // U-415：渡劫进行中同样是待决状态——年度事件不抢渡劫的场，
+  // 保持排队，劫了之后下一次落盘再呈现。
+  if (c.pendingEvent || c.route || c.tribulation) return;
+  const year = typeof c.annualEventYear === "number" && Number.isFinite(c.annualEventYear) ? c.annualEventYear : actionYearFor(c.totalMonths);
+  c.annualEventQueued = false;
+  presentAnnualEvent(state, year);
+}
+// ---------- U-416 属性共鸣 / 失衡：状态判定与紊乱 debuff ----------
+// 状态只读现有四维（attrOf 口径：本体属性 + 天赋修正，与判定链
+// 用的属性同一把尺），实时计算、不落盘：四维最高 / 最低的比值
+// ≤ 配置 resonanceMaxRatio（1.6）为「四象共鸣」，≥ 配置
+// imbalanceMinRatio（2.5）为「灵力失衡」，中间为「平稳」。最
+// 低值按 1 兜底（防极端修正把某维压到 0 时除零）。属性变化
+// （降生 / 法宝解封 / 轮回分配等）后状态即时跟随，无需任何维护。
+export type ResonanceKind = "resonance" | "balanced" | "imbalance";
+export interface ResonanceState { kind: ResonanceKind; ratio: number }
+export function resonanceStateOf(c: Character): ResonanceState {
+  const vals = [attrOf(c, "might"), attrOf(c, "sense"), attrOf(c, "fortune"), attrOf(c, "body")];
+  const hi = Math.max(...vals);
+  const lo = Math.max(1, Math.min(...vals));
+  const ratio = hi / lo;
+  const kind: ResonanceKind = ratio <= RESONANCE.resonanceMaxRatio ? "resonance" : ratio >= RESONANCE.imbalanceMinRatio ? "imbalance" : "balanced";
+  return { kind, ratio };
+}
+/** U-416：灵力紊乱是否生效中（到期月份未到且未清零）。 */
+export function resonanceDisorderActive(c: Character): boolean {
+  const until = typeof c.resonanceDisorderUntil === "number" && Number.isFinite(c.resonanceDisorderUntil) ? c.resonanceDisorderUntil : 0;
+  return until > 0 && c.totalMonths < until;
+}
+/** U-416：灵力紊乱剩余月数（未生效时 0）——角色页展示用。 */
+export function resonanceDisorderMonthsLeft(c: Character): number {
+  return resonanceDisorderActive(c) ? Math.max(0, Math.floor(c.resonanceDisorderUntil - c.totalMonths)) : 0;
+}
+/**
+ * U-416：紊乱到期结算（advanceMonths 时间推进口调用）：累计月
+ * 份越过到期月份的那一刻，紊乱自动消散——记一条日志并把到期
+ * 字段清零（此后不再重复记）。未到期 / 无紊乱时一字不动。
+ */
+export function settleResonanceDisorder(state: GameState): void {
+  const c = state.character;
+  if (!c) return;
+  const until = typeof c.resonanceDisorderUntil === "number" && Number.isFinite(c.resonanceDisorderUntil) ? c.resonanceDisorderUntil : 0;
+  if (until <= 0 || c.totalMonths < until) return;
+  c.resonanceDisorderUntil = 0;
+  if (!c.dead) pushLog(state, c.lifeNo, "event_ok", `🌿 灵力紊乱期满消散：经脉里的乱流养了这些时日，终于尽数平复——修炼收益不再打折。`);
+}
+
 export function advanceYears(state: GameState, years: number): void {
   advanceMonths(state, years * TIME_COSTS.monthsPerYear);
 }
@@ -729,6 +1102,7 @@ export function checkDeath(state: GameState, cause: string) {
 export function applyEffects(state: GameState, eff: Effect, opts?: { decayed?: boolean }) {
   const c = state.character;
   if (!c) return;
+  const stonesBefore = c.stones;
   const resilient = c.talentIds.includes("t_resilient");
   const wealthy = c.talentIds.includes("t_wealth");
   const social = c.talentIds.includes("t_social");
@@ -759,6 +1133,11 @@ export function applyEffects(state: GameState, eff: Effect, opts?: { decayed?: b
   // U-608：效果的 age 单位仍是年，经细时钟口换算成月份推进（年口径不变）。
   if (eff.age) advanceYears(state, eff.age);
   if (eff.shard) grantShards(state, eff.shard);
+  // U-408：单轮目标「累计获得灵石」按本结算的实际灵石增量推进
+  //（含富贵天赋加成后的落袋数；扣费走 applyEventCost 不经此处、
+  // 不倒扣）。目标达成发奖时当前目标已先清零，此处回推不会自激。
+  const stonesGained = c.stones - stonesBefore;
+  if (stonesGained > 0) bumpRoundGoal(state, "stonesGain", stonesGained);
 }
 
 // U-377 代价结算：选定带代价的选项时，在掷骰结算收益之前先付代价。
@@ -1627,6 +2006,8 @@ export function resolveFight(state: GameState, c: Character, enemy: EnemyDef): v
     bumpCommissions(state, "fight", c.locationId);
     // U-389：斗法获胜同样推进本地点的「斗法」类限时帖进度。
     bumpTimedEvents(state, "fight", c.locationId);
+    // U-407：斗法获胜同样推进连环任务当前阶段的「斗法」目标。
+    bumpQuests(state, "fight", { locationId: c.locationId });
     const text = margin >= 40
       ? `摧枯拉朽！你以压倒之势击败${enemy.name}，缴获灵石 ${stones}、修为精进 ${cult}。`
       : `一番恶斗，你击败了${enemy.name}，缴获灵石 ${stones}、修为精进 ${cult}。`;
@@ -1985,6 +2366,256 @@ export function bumpTimedEvents(state: GameState, kind: TimedEventDef["objective
   }
 }
 
+// ---------- U-407 连环任务引擎：目标文案 / 奖励结算 / 可接判定 / 阶段推进 ----------
+
+// 任务奖励的一句人话（阶段奖励/全链奖励/分支即时奖励共用，与
+// grantQuestReward 的落账逐项一致）：只列非空项，业力带符号。
+export function questRewardText(r: QuestReward): string {
+  const parts: string[] = [];
+  if (r.stones) parts.push(`灵石 +${r.stones}`);
+  if (r.cult) parts.push(`修为 +${r.cult}`);
+  if (r.karma) parts.push(`业力 ${r.karma > 0 ? "+" : ""}${r.karma}`);
+  if (r.legacy) parts.push(`传承点 +${r.legacy}`);
+  if (r.pills?.heal) parts.push(`${SHOP.heal.name} ×${r.pills.heal}`);
+  if (r.pills?.cult) parts.push(`${SHOP.cult.name} ×${r.pills.cult}`);
+  if (r.pills?.brk) parts.push(`${SHOP.brk.name} ×${r.pills.brk}`);
+  return parts.join("、");
+}
+
+// 任务奖励落账（本引擎唯一的奖励入口）：灵石/修为/业力走既有
+// applyEffects（天赋修正与事件/委托奖励同一结算链），传承点与丹
+// 药落既有字段（legacyPoints / pills 囊）——不新设货币、不新造
+// 结算路径。业力为负（分支代价）时同样经 applyEffects 落账。
+export function grantQuestReward(state: GameState, reward: QuestReward): void {
+  const c = state.character;
+  if (!c) return;
+  const eff: Effect = {};
+  if (reward.stones) eff.stones = reward.stones;
+  if (reward.cult) eff.cult = reward.cult;
+  if (reward.karma) eff.karma = reward.karma;
+  if (Object.keys(eff).length > 0) applyEffects(state, eff);
+  if (reward.legacy) c.legacyPoints += reward.legacy;
+  if (reward.pills) {
+    if (reward.pills.heal) c.pills.heal += reward.pills.heal;
+    if (reward.pills.cult) c.pills.cult += reward.pills.cult;
+    if (reward.pills.brk) c.pills.brk += reward.pills.brk;
+  }
+}
+
+// 阶段目标的一句人话（可接列表、进行中面板与推进日志共用）：目
+// 标类型 + 地点/NPC 参数 + 次数，全部出自现有内容，不另造词。
+export function questObjectiveText(stage: QuestStageDef): string {
+  const o = stage.objective;
+  const locName = o.locationId ? locById(o.locationId)?.name ?? o.locationId : "";
+  const at = locName ? `在「${locName}」` : "";
+  switch (o.kind) {
+    case "explore": return `${at}历际遇（结算事件） ${o.need} 回`;
+    case "arrive": return `旅行抵达「${locName}」`;
+    case "fight": return `${at}斗法获胜 ${o.need} 回`;
+    case "cultivate": return `修炼 ${o.need} 回`;
+    case "craft": return `${at}做副职营生 ${o.need} 回`;
+    case "visit": return `登门拜访${o.npcId ? npcById(o.npcId)?.name ?? o.npcId : "故人"}`;
+    case "breakthrough": return `突破成功 ${o.need} 回`;
+    case "sectChore": return `${at}办宗门差事 ${o.need} 回`;
+  }
+}
+
+// 阶段在任务图中的深度（自首阶段沿 next/分支边 BFS 的最短步数，
+// 1 起）与全图最大深度——面板「第 X / N 阶段」展示用；分支汇合时
+// 取最短路径。定义已经过加载自检（全可达、无环），查不到时兜 1。
+export function questStageDepth(def: QuestDef, stageId: string): number {
+  const first = def.stages[0];
+  if (!first) return 1;
+  const depth = new Map<string, number>([[first.id, 1]]);
+  const queue: string[] = [first.id];
+  while (queue.length > 0) {
+    const cur = queue.shift() as string;
+    const st = def.stages.find((s) => s.id === cur);
+    if (!st) continue;
+    const d = (depth.get(cur) ?? 1) + 1;
+    const edges = st.branch ? st.branch.options.map((op) => op.next) : st.next !== undefined ? [st.next] : [];
+    for (const e of edges) if (!depth.has(e)) { depth.set(e, d); queue.push(e); }
+  }
+  return depth.get(stageId) ?? 1;
+}
+export function questStageTotal(def: QuestDef): number {
+  let max = 1;
+  for (const s of def.stages) max = Math.max(max, questStageDepth(def, s.id));
+  return max;
+}
+
+// 某条任务当前是否可接：本世未完成、不在进行中，且张贴处与每个
+// 阶段的目标地点都已解锁（境界够得着）——与委托板 ensureCommis-
+// sionBoard 的候选过滤同一口径，只是连环任务不存板面、按此派生。
+export function questAvailable(c: Character, def: QuestDef): boolean {
+  if (!c.quests) return false;
+  if (c.quests.completedIds.includes(def.id)) return false;
+  if (c.quests.active.some((a) => a.id === def.id)) return false;
+  const boardLoc = locById(def.boardLocationId);
+  if (!boardLoc || !locUnlocked(c, boardLoc)) return false;
+  for (const s of def.stages) {
+    if (!s.objective.locationId) continue;
+    const loc = locById(s.objective.locationId);
+    if (!loc || !locUnlocked(c, loc)) return false;
+  }
+  return true;
+}
+
+// 阶段完成结算（bumpQuests 内部）：阶段奖励即时到账并记推进日志；
+// 带分支的阶段停在分支点等玩家抉择（actions-quests 的 branch）；
+// 有 next 则切到下一阶段（计数清零、记新阶段文案）；两者皆无 =
+// 终点阶段，全链走完、待回张贴处 claim 结算全链奖励。
+function completeQuestStage(state: GameState, c: Character, a: ActiveQuest, def: QuestDef, stage: QuestStageDef): void {
+  let rewardNote = "";
+  if (stage.reward) {
+    grantQuestReward(state, stage.reward);
+    rewardNote = `阶段奖励到账：${questRewardText(stage.reward)}。`;
+  }
+  if (stage.branch) {
+    a.awaitingBranch = true;
+    pushLog(state, c.lifeNo, "quest", `🧭 连环任务阶段完成：「${def.title}」· ${stage.title}。${rewardNote}${stage.branch.prompt}（抉择在即——去连环任务面板上定夺，选哪条路，后面的阶段与结局都不同。）`);
+    return;
+  }
+  if (stage.next !== undefined) {
+    const nextStage = def.stages.find((s) => s.id === stage.next);
+    a.stageId = stage.next;
+    a.progress = 0;
+    if (nextStage) {
+      pushLog(state, c.lifeNo, "quest", `🧭 连环任务阶段完成：「${def.title}」· ${stage.title}。${rewardNote}下一阶段「${nextStage.title}」：${nextStage.text}（目标：${questObjectiveText(nextStage)}）`);
+    }
+    return;
+  }
+  a.done = true;
+  const boardName = locById(def.boardLocationId)?.name ?? def.boardLocationId;
+  pushLog(state, c.lifeNo, "quest", `🧭 连环任务走完：「${def.title}」的全部阶段都办妥了！${rewardNote}回「${boardName}」找发布人结算全链奖励（${questRewardText(def.finalReward)}），听听这桩事的结局。`);
+}
+
+// ---------- U-408 单轮目标：候选补齐 / 目标文案 / 进度推进 ----------
+
+// 候选补齐（读档期派生处理，与委托板面补齐同口径）：无当前目标
+// 时，候选须是配置表 candidateCount 个互不相同、定义存在的目标
+// id——不满足即种子化洗牌整池重新抽（种子流 round-goal:candi-
+// dates，与其他抽取互不干扰）；已有当前目标时只做失效兜底（定
+// 义被删则清目标）。角色已陨落时不补（本世目标随轮回清空）。
+export function ensureRoundGoalCandidates(state: GameState): void {
+  const c = state.character;
+  if (!c || c.dead || !c.roundGoal) return;
+  const g = c.roundGoal;
+  if (g.currentId) {
+    if (!roundGoalById(g.currentId)) { g.currentId = ""; g.progress = 0; }
+    else return;
+  }
+  const seen = new Set<string>();
+  const valid = g.candidates.filter((id) => {
+    if (!roundGoalById(id) || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  if (valid.length === ROUND_GOALS.candidateCount) { g.candidates = valid; return; }
+  const pool = ROUND_GOALS.goals.map((d) => ({ value: d.id, commonality: 1 }));
+  const drawn: string[] = [];
+  const rest = [...pool];
+  while (drawn.length < ROUND_GOALS.candidateCount && rest.length > 0) {
+    const id = weighted(rngForNext(state, "round-goal:candidates"), rest);
+    drawn.push(id);
+    const idx = rest.findIndex((e) => e.value === id);
+    if (idx >= 0) rest.splice(idx, 1);
+  }
+  g.candidates = drawn;
+}
+
+// 单轮目标的一句人话（候选卡、进行中卡与推进日志共用）：目标类
+// 型 + 次数/数量，全部出自配置表，不另造词。
+export function roundGoalObjectiveText(def: RoundGoalDef): string {
+  const o = def.objective;
+  switch (o.kind) {
+    case "explore": return `历际遇（结算事件） ${o.need} 回`;
+    case "arrive": return `旅行抵达 ${o.need} 处地方`;
+    case "fight": return `斗法获胜 ${o.need} 回`;
+    case "cultivate": return `修炼 ${o.need} 回`;
+    case "hidden": return `触发隐藏发现 ${o.need} 次`;
+    case "ore": return `探索拾得矿石 ${o.need} 块`;
+    case "page": return `学到残页功法 ${o.need} 门`;
+    case "stonesGain": return `累计获得灵石 ${o.need}`;
+  }
+}
+
+// 进度推进（本系统唯一的推进入口）：某个既有动作结算完毕后调用
+// ——当前目标类型与 kind 相同才推进（stonesGain 按灵石增量计、
+// 其余按次 +amount），封顶 need；未达时记推进日志（stonesGain 增
+// 量来源太多太频，不逐笔记，只在达成时记）。达成瞬间：先清当前
+// 目标再发奖（奖励的灵石增量会经 applyEffects 回到 stonesGain 推
+// 进口，目标已清便不会自激、更不会重复发奖——奖励只发这一次），
+// 奖励走任务引擎同一入口 grantQuestReward 落既有字段，随后补齐
+// 新一轮候选、记达成日志，卡面即可再选新目标。调用点：探索/抵
+// 达/斗法/修炼经 bumpQuests 的同一批钩子并行推进；隐藏发现
+//（maybeHiddenDiscovery）、拾矿（maybeDropOre）、残页学会
+//（maybeDropTechniquePage 等残页学会点）、灵石增量（applyEffects
+// 的正增量）各自在结算点直调。本函数不参与任何动作的守卫判定：
+// 目标只做引导，不锁、不拦任何动作，未完成无任何惩罚。
+export function bumpRoundGoal(state: GameState, kind: RoundGoalKind, amount = 1): void {
+  const c = state.character;
+  if (!c || c.dead || !c.roundGoal) return;
+  const g = c.roundGoal;
+  if (!g.currentId) return;
+  const def = roundGoalById(g.currentId);
+  if (!def || def.objective.kind !== kind) return;
+  g.progress = Math.min(def.objective.need, g.progress + Math.max(0, Math.floor(amount)));
+  if (g.progress < def.objective.need) {
+    if (kind !== "stonesGain") {
+      pushLog(state, c.lifeNo, "goal", `🎯 本轮目标推进：「${def.title}」——${roundGoalObjectiveText(def)}，进度 ${g.progress}/${def.objective.need}。`);
+    }
+    return;
+  }
+  const rewardText = questRewardText(def.reward);
+  g.currentId = "";
+  g.progress = 0;
+  g.completedCount += 1;
+  grantQuestReward(state, def.reward);
+  ensureRoundGoalCandidates(state);
+  c.lastRoll = {
+    label: `本轮目标达成·${def.title}`, dice: 0, bonus: 0, total: 0, dc: 0, success: true,
+    text: `「${def.title}」这一轮的心愿了了。额外奖励：${rewardText || "无"}——去地图页的「本轮目标」卡再定一个新目标吧。`,
+  };
+  pushLog(state, c.lifeNo, "goal", `🎯 本轮目标达成：「${def.title}」——${def.text}额外奖励到账：${rewardText}。`);
+}
+
+// 进度推进（本引擎唯一的推进入口）：某个既有动作结算完毕后调用
+// ——命中「当前阶段目标类型 + 地点/NPC 参数」的进行中任务各 +1
+// （封顶 need），每次推进与阶段切换都记日志。调用点都是既有结算
+// 的尾巴，与 bumpCommissions / bumpTimedEvents 并行、互不影响，
+// 不改任何既有结算数值：斗法获胜（resolveFight）、副职与锻造
+// （doSimpleAction / forgeArtifact）、宗门差事（sect chore）、牌
+// 堆事件结算（chooseOption 的事件分支，含路线事件节点与日常触
+// 发；U-402 模式探索事件不绑地点、不推进）、修炼（doSimpleAct-
+// ion cultivate）、旅行抵达（travel）、拜访（social visit 友好
+// 分支）、突破成功（act breakthrough）。停在分支点或已走完的任
+// 务不计数（先抉择/先结算）。
+export function bumpQuests(state: GameState, kind: QuestObjectiveKind, hook: { locationId?: string; npcId?: string } = {}): void {
+  const c = state.character;
+  if (!c || c.dead || !c.quests) return;
+  // U-408：单轮目标与连环任务共用同一批动作钩子——探索/抵达/斗法/
+  // 修炼四类在推进任务之前先推进本轮目标（两套系统并行、互不影响）。
+  if (kind === "explore" || kind === "arrive" || kind === "fight" || kind === "cultivate") bumpRoundGoal(state, kind, 1);
+  for (const a of c.quests.active) {
+    if (a.done || a.awaitingBranch) continue;
+    const def = questById(a.id);
+    if (!def) continue;
+    const stage = def.stages.find((s) => s.id === a.stageId);
+    if (!stage) continue;
+    const o = stage.objective;
+    if (o.kind !== kind) continue;
+    if (o.locationId !== undefined && hook.locationId !== o.locationId) continue;
+    if (o.npcId !== undefined && hook.npcId !== o.npcId) continue;
+    a.progress = Math.min(o.need, a.progress + 1);
+    if (a.progress < o.need) {
+      pushLog(state, c.lifeNo, "quest", `🧭 连环任务推进：「${def.title}」· ${stage.title} —— ${questObjectiveText(stage)}，进度 ${a.progress}/${o.need}。`);
+    } else {
+      completeQuestStage(state, c, a, def, stage);
+    }
+  }
+}
+
 // ---------- U-390 日常委托事件池：按月刷新 / 触发查询 / 办妥结算 ----------
 
 // 日常委托的一句人话（板面与日志共用）：发布方 + 委托引用的际遇 +
@@ -2328,6 +2959,9 @@ export function maybeDropTechniquePage(state: GameState): boolean {
     // U-086：学会当刻收录知识图鉴；图鉴已有 = 重学（起始熟练度
     // 与涨幅加成由 recordTechniqueLearned 落定，日志明示）。
     const learnInfo = recordTechniqueLearned(state, c, tech.id);
+    // U-408：残页学会一门功法是单轮目标的一种可观测钩子（折作
+    // 参悟/无灵根学不了不算学会，不推进）。
+    bumpRoundGoal(state, "page", 1);
     pushLog(state, c.lifeNo, "treasure", learnInfo.relearned
       ? `📜 地点掉落 · 功法残页：在「${locName}」的际遇余烬里，你拾得一页${td.label}功法残页——正是「${tech.name}」的失传篇页（${tech.desc}）。这门功法已载于知识图鉴，前世参悟犹在：重学入手，本世自${techLayerText(tech, learnInfo.startPoints)}起步、增长 +${learnInfo.gainBonusPct}%（精通印记·${imprintLabelFor(learnInfo.imprint)}，强度 ${imprintTextFor(learnInfo.imprint)}/100；此地掉落${td.label}残页，掉落表见地图页「地点掉落」）。`
       : `📜 地点掉落 · 功法残页：在「${locName}」的际遇余烬里，你拾得一页${td.label}功法残页——正是「${tech.name}」的失传篇页（${tech.desc}）残页入手、就地参悟，你学会了这门功法，并录入知识图鉴——学会即永久解锁，轮回不清空（此地掉落${td.label}残页，掉落表见地图页「地点掉落」）。`);
@@ -2355,7 +2989,149 @@ export function maybeDropOre(state: GameState): boolean {
   c.ores[tier.id] = oreCountFor(c, tier.id) + 1;
   const locName = locById(c.locationId)?.name ?? c.locationId;
   pushLog(state, c.lifeNo, "treasure", `⛏️ 探索拾矿：在「${locName}」的际遇余烬里，你拾得一块${tier.tier}阶矿石「${tier.name}」（现有 ${c.ores[tier.id]} 块）——可去修炼宗门页的锻造台以此锻造法宝，或留着待用。`);
+  // U-408：拾矿是单轮目标的一种可观测钩子。
+  bumpRoundGoal(state, "ore", 1);
   return true;
+}
+
+// ---------- U-402 随机探索：模式子池抽取与材料附赠结算 ----------
+
+// 从某一类随机探索子池里抽一桩际遇（种子流 random-explore:<类>，
+// 按 commonality 权重抽取，与事件池同一把稀有度尺）：沿用探索
+// 「避开最近 3 个事件」的优化——最近遇过的事件先避开，池里其余
+// 不够时才放回。模式池与地点牌堆完全分开：不读 eventDeck、不占
+// 牌堆名额，抽到的事件也不会进地点牌堆。无角色/未知类返回
+// undefined（调用方不结算）。
+export function drawRandomExploreEvent(state: GameState, modeId: RandomExploreModeId): EventDef | undefined {
+  const c = state.character;
+  if (!c) return undefined;
+  const mode = randomExploreModeById(modeId);
+  if (!mode) return undefined;
+  const recent = new Set(c.recentEvents);
+  let pool = mode.events.filter((e) => !recent.has(e.id));
+  if (pool.length === 0) pool = [...mode.events];
+  const picked = weighted(rngForNext(state, `random-explore:${modeId}`), pool.map((e) => ({ value: e, commonality: e.commonality })));
+  return randomExploreEventById(picked.id);
+}
+
+// ---------- U-412 翻格遇事件：发牌、抽事件与呈现 ----------
+
+// 发一局新棋盘：9 格类型按配置表权重（grid-explore.json 的
+// cellWeights）逐格抽定（种子流 grid:deal），诗句随格定死（同
+// 类型内按出现次序轮取配置诗句）。只生成状态、不扣费不耗时——
+// 开局的扣点与耗时在动作层（startGrid）按探索口径先行结算。
+export function dealGridBoard(state: GameState): GridBoardState {
+  const table = GRID_CELL_TYPES.map((t) => ({ value: t, commonality: GRID_EXPLORE.cellWeights[t] }));
+  const poemSeen: Partial<Record<GridCellType, number>> = {};
+  const cells: GridCellState[] = [];
+  for (let i = 0; i < 9; i++) {
+    const type = weighted(rngForNext(state, "grid:deal"), table);
+    const n = poemSeen[type] ?? 0;
+    poemSeen[type] = n + 1;
+    cells.push({ type, flipped: false, poem: gridPoemFor(type, n) });
+  }
+  return { cells };
+}
+
+// 按格子类型抽一桩翻格事件：主池 = 现有事件池 EVENTS 按类型过
+// 滤（content.ts 的 gridEventPoolFor，分类只读事件内容、排除秘
+// 境专属 / 接管洞府 / 带加圈选项的事件），种子流 grid:event:<类
+// 型> 按 commonality 加权，沿用「避开最近 3 个事件」口径（池里
+// 其余不够时才放回）。主池为空（某类在事件池中无可过滤项）时
+// 走配置表的专属兜底小事件表（gridFallbackEventsFor）。抽取不
+// 读 eventDeck、不占牌堆名额，抽到的事件也不会进地点牌堆。
+export function drawGridEvent(state: GameState, type: GridCellType): EventDef | undefined {
+  const c = state.character;
+  if (!c) return undefined;
+  const recent = new Set(c.recentEvents);
+  let pool = gridEventPoolFor(type).filter((e) => !recent.has(e.id));
+  if (pool.length === 0) pool = gridEventPoolFor(type);
+  if (pool.length > 0) {
+    return weighted(rngForNext(state, `grid:event:${type}`), pool.map((e) => ({ value: e, commonality: e.commonality })));
+  }
+  const fallback = gridFallbackEventsFor(type);
+  if (fallback.length === 0) return undefined;
+  return weighted(rngForNext(state, `grid:fallback:${type}`), fallback.map((e) => ({ value: e, commonality: e.commonality })));
+}
+
+// 把一桩翻格事件摆成待决事件：构建与年度事件同口径（代价复制
+// + 付不起原因预先算好、模板标记复制、Q34 机缘档位上调记在选
+// 项难度里），另盖 grid 标记（格子类型）——chooseOption 据此跳
+// 过地点口径的结算尾巴（翻格事件不绑地点、不挂残页 / 拾矿 /
+// 法宝三掷、不推进地点口径的委托 / 限时帖 / 连环任务）；不调
+// noteSecretRealmPrelude（翻格与 U-401 秘境槽位互不干扰，秘境
+// 专属事件本就不进翻格池）。触发只写日志、不动月份与行动点
+// （翻格本身不再另耗——开局已付）。
+export function presentGridEvent(state: GameState, ev: EventDef, cellType: GridCellType): void {
+  const c = state.character;
+  if (!c || c.dead || c.pendingEvent) return;
+  c.recentEvents = [...c.recentEvents, ev.id].slice(-3);
+  c.pendingEvent = {
+    id: ev.id, title: ev.title, desc: ev.desc, art: ev.art,
+    grid: { cellType },
+    ...(ev.trio ? { trio: true } : {}),
+    ...(ev.dual ? { dual: true } : {}),
+    ...(ev.moral ? { moral: true } : {}),
+    options: ev.options.map((o) => {
+      const base = { label: o.label, hint: o.hint, attr: o.attr, dc: o.dc };
+      if (!o.cost) return base;
+      const blocked = eventCostBlockReason(c, o.cost);
+      return { ...base, cost: o.cost, ...(blocked ? { costBlocked: blocked } : {}) };
+    }),
+  };
+  // Q34 机缘档位上调与探索路径同口径（记在待决选项难度里）。
+  const fate = fateTierBump(Math.max(0, ...ev.options.map((o) => o.dc)), c.realmIdx, attrOf(c, "fortune"));
+  if (fate.gapSteps > 0 && c.pendingEvent) {
+    for (const o of c.pendingEvent.options) if (o.dc > 0) o.dc += fate.bump;
+    c.pendingEvent.desc += ` ✨ 机缘牵引：此番际遇的档位高出你当前境界约 ${fate.gapSteps} 档——${fate.bump > 0 ? `难度上调 +${fate.bump}，你的气运已抵消其中一部分` : "你的气运正盛，已把境界差带来的难度尽数抵消"}。`;
+  }
+  pushLog(state, c.lifeNo, "event", `遭遇事件：${ev.title}。`);
+}
+
+// 探秘类选项的材料附赠结算（chooseOption 在模式际遇掷骰成功后调
+// 用；失败不发）：附赠只取已有材料类型——矿石入 ores（与拾矿同
+// 一持有字段）、丹药入丹药囊（坊市同款三丹）、功法残页走与
+// U-396 地点掉落同一口径（功法槽空着学会并录入知识图鉴；已在
+// 修习功法、或无灵根遇引气类学不了时，按中品档 fallback 折作
+// 参悟）。不给传承点、不掉法宝、不发稀有丹药槽位奖励（那是
+// U-401 的地盘），附赠内容由配置表（random-explore.json 的
+// grant）定死，结算只照表发放、不掷额外概率。
+export function settleRandomExploreGrant(state: GameState, grant: RandomExploreGrant): void {
+  const c = state.character;
+  if (!c || c.dead) return;
+  if (grant.oreTier !== undefined) {
+    const tier = FORGE.tiers.find((t) => t.tier === grant.oreTier);
+    if (tier) {
+      c.ores[tier.id] = oreCountFor(c, tier.id) + 1;
+      pushLog(state, c.lifeNo, "treasure", `探秘所获：一块${tier.tier}阶矿石「${tier.name}」（现有 ${c.ores[tier.id]} 块）——可去修炼宗门页的锻造台以此锻造法宝，或留着待用。`);
+    }
+  }
+  if (grant.pill) {
+    c.pills[grant.pill] += 1;
+    pushLog(state, c.lifeNo, "treasure", `探秘所获：一枚「${SHOP[grant.pill].name}」，已收入丹药囊。`);
+  }
+  if (grant.pageTechId) {
+    const tech = techById(grant.pageTechId);
+    if (tech) {
+      const td = dropTierDef("mid");
+      if (techniqueBlockedByNoRoot(c, tech)) {
+        applyEffects(state, td.fallback);
+        pushLog(state, c.lifeNo, "treasure", `探秘所获：一页功法残页——「${tech.name}」的失传篇页（${tech.desc}）。无灵根，无法引气：这门引气类功法你学不了，残页只得折作参悟：${formatEffectGains(td.fallback)}。`);
+      } else if (!c.techniqueId) {
+        c.techniqueId = tech.id;
+        const learnInfo = recordTechniqueLearned(state, c, tech.id);
+        // U-408：探秘残页学会同样推进「学残页」类单轮目标。
+        bumpRoundGoal(state, "page", 1);
+        pushLog(state, c.lifeNo, "treasure", learnInfo.relearned
+          ? `探秘所获：一页功法残页——正是「${tech.name}」的失传篇页（${tech.desc}）。这门功法已载于知识图鉴，前世参悟犹在：重学入手，本世自${techLayerText(tech, learnInfo.startPoints)}起步、增长 +${learnInfo.gainBonusPct}%（精通印记·${imprintLabelFor(learnInfo.imprint)}，强度 ${imprintTextFor(learnInfo.imprint)}/100）。`
+          : `探秘所获：一页功法残页——「${tech.name}」的失传篇页（${tech.desc}）。残页入手、就地参悟，你学会了这门功法，并录入知识图鉴——学会即永久解锁，轮回不清空。`);
+      } else {
+        applyEffects(state, td.fallback);
+        const same = c.techniqueId === tech.id;
+        pushLog(state, c.lifeNo, "treasure", `探秘所获：一页功法残页——「${tech.name}」的失传篇页。${same ? "这门功法你已在修习，同页对照、别有会心，残页化作参悟" : "你已在修习功法，残页不再另学，折作参悟"}：${formatEffectGains(td.fallback)}。`);
+      }
+    }
+  }
 }
 
 // ---------- U-399 隐藏要素：埋点剩余与隐藏发现 ----------
@@ -2427,6 +3203,8 @@ export function maybeHiddenDiscovery(state: GameState): boolean {
       c.techniqueId = tech.id;
       // U-086：学会当刻收录知识图鉴；图鉴已有 = 重学（与 U-396 残页同一收录口）。
       const learnInfo = recordTechniqueLearned(state, c, tech.id);
+      // U-408：隐藏发现里学会残页同样推进「学残页」类单轮目标。
+      bumpRoundGoal(state, "page", 1);
       pushLog(state, c.lifeNo, "treasure", learnInfo.relearned
         ? `🔍 隐藏发现：在「${locName}」的隐秘处，你寻见一页${td.label}功法残页——正是「${tech.name}」的失传篇页（${tech.desc}）。这门功法已载于知识图鉴，前世参悟犹在：重学入手，本世自${techLayerText(tech, learnInfo.startPoints)}起步、增长 +${learnInfo.gainBonusPct}%（精通印记·${imprintLabelFor(learnInfo.imprint)}，强度 ${imprintTextFor(learnInfo.imprint)}/100）。${restNote}`
         : `🔍 隐藏发现：在「${locName}」的隐秘处，你寻见一页${td.label}功法残页——正是「${tech.name}」的失传篇页（${tech.desc}）残页入手、就地参悟，你学会了这门功法，并录入知识图鉴——学会即永久解锁，轮回不清空。${restNote}`);
@@ -2440,6 +3218,9 @@ export function maybeHiddenDiscovery(state: GameState): boolean {
     applyEffects(state, td.fallback);
     pushLog(state, c.lifeNo, "treasure", `🔍 隐藏发现：在「${locName}」的断壁残垣间，你发现前人刻下的半篇手记，就地参悟——${formatEffectGains(td.fallback)}。${restNote}`);
   }
+  // U-408：触发隐藏发现本身是单轮目标的一种可观测钩子（不论这
+  // 次发现给的是哪类奖励，触发一次即推进一次）。
+  bumpRoundGoal(state, "hidden", 1);
   return true;
 }
 
@@ -2609,4 +3390,183 @@ export function settleSecretRealmBossFight(state: GameState, def: SecretRealmDef
     if (!outcome) applyEffects(state, def.boss.occupiedFallback);
   }
   pushLog(state, c.lifeNo, "fight", `🏆 秘境之主败落：你在「${locName}」击败了「${def.boss.name}」！固定大奖到账：传承点 +${def.boss.legacyPoints}；${artifactNote}。本世这一界的 Boss 槽就此领空，轮回后重置。`);
+}
+
+// ---------- U-414 禁地夺丹：破境丹门槛与禁地 Boss 挑战 ----------
+// 大境界突破 = 当前处于某境大圆满（stageIdx 3）且下一境存在
+// （境界序号将递增）；小境界突破（stageIdx < 3）与已至此界之
+// 巅（渡劫大圆满，无下一境）都不算，照旧不需要破境丹。
+
+/** 下一步突破是否为大境界突破（需要破境丹把关）。 */
+export function isMajorBreakthroughNext(c: Character, settings: Settings): boolean {
+  return c.stageIdx >= 3 && c.realmIdx < realmsFor(settings).length - 1;
+}
+
+/**
+ * U-414：大境界突破的持丹门槛拦截原因（可突破时为 null）。服务
+ * 端拦截日志与客户端置灰文案共用同一口径：缺丹 + 指引去挑战禁
+ * 地 Boss（或坊市买丹等既有来源）——绝不静默失败（沿用 U-377 /
+ * U-409 明示口径）。小境界突破与已持有破境丹时恒为 null。
+ */
+export function breakthroughPillBlockReason(state: GameState): string | null {
+  const c = state.character;
+  if (!c || c.dead) return null;
+  if (!isMajorBreakthroughNext(c, state.settings)) return null;
+  if (c.pills.brk > 0) return null;
+  const targetName = realmsFor(state.settings)[c.realmIdx + 1]?.name ?? "";
+  const boss = breakthroughBossFor(c.realmIdx + 1);
+  const bossHint = boss ? `去「修炼宗门」页的禁地夺丹挑战${boss.placeName}的「${boss.name}」，胜之即得破境丹` : "去挑战禁地 Boss 夺丹";
+  return `大境界突破被拦：冲${targetName}境需要一颗破境丹，你丹药囊里一颗也没有。${bossHint}；坊市丹药商店、黄泉鬼域秘境等处也出破境丹，攒下一颗再来突破。`;
+}
+
+// 禁地 Boss 的斗法敌手形态：tier/might 出自配置表，难度走既有
+// combatDc 口径（resolveFight 内部查表），与普通敌手、U-401 秘
+// 境 Boss 同一条链；locations 恒空——它不在任何地点出没，只能
+// 经禁地夺丹入口挑战（斗法列表按地点过滤，永不串入）。
+export function breakthroughBossEnemy(def: BreakthroughBossDef): EnemyDef {
+  return { id: def.id, name: def.name, desc: def.intro, tier: def.tier, might: def.might, locations: [] };
+}
+
+/**
+ * U-414：禁地 Boss 战结算（challengeBreakthroughBoss 动作在守卫
+ * 与扣点后调用）：战斗本体走既有单次掷骰斗法链 resolveFight
+ * （Q34 斗法 d20、胜势奖惩、败北伤势、耗时 1 月、致死与遁逃法
+ * 宝口径全与普通斗法一致，本函数不另造规则；resolveFight 的胜
+ * 利缴获灵石/修为是斗法本体自带，与夺丹并行不悖）。打赢
+ * （resolveFight 的 lastRoll 为胜且未陨落）→ 破境丹 +1 入丹药
+ * 囊并记日志；败北无丹、不设次数限制，养好伤还能再战。胜负只
+ * 决定是否拿到破境丹，不触碰突破检定的任何数值。
+ */
+export function settleBreakthroughBossFight(state: GameState): void {
+  const c = state.character;
+  if (!c || c.dead) return;
+  const def = breakthroughBossFor(c.realmIdx + 1);
+  if (!def) return;
+  const enemy = breakthroughBossEnemy(def);
+  resolveFight(state, c, enemy);
+  const won = !c.dead && c.lastRoll?.success === true && c.lastRoll.label === `斗法·${enemy.name}`;
+  if (!won) return;
+  c.pills.brk += 1;
+  const targetName = realmsFor(state.settings)[def.targetRealm]?.name ?? "";
+  pushLog(state, c.lifeNo, "fight", `🏆 禁地夺丹：你在${def.placeName}击败了「${def.name}」，夺得破境丹一颗（丹药囊现有 ${c.pills.brk} 颗）——冲${targetName}境的门槛已备齐，修为攒满即可突破（U-415：破境丹在渡劫成功、正式升境时消耗 1 颗）。`);
+}
+
+// ---------- U-415 渡劫仪式：升境收束 / 渡劫战 / 劫后结算 ----------
+// 大境界突破的「升境」自此收束为一处：ascendAfterBreakthrough
+// 是全游戏唯一让 stageIdx/realmIdx 递进的结算（小境界在突破动
+// 作里判定成功即调；大境界须先渡劫，胜后在 concludeTribulation
+// 里调）——U-414 挂点由此兑现，勿另开升境路径。
+
+/**
+ * 突破判定通过后的升境结算（原 actions-play 突破成功分支的升境
+ * 段逐字抽出）：小境界 stageIdx +1；大境界 realmIdx +1、stageIdx
+ * 归零并按新境界表刷新寿元/气血/灵力上限；天赋（体魄强健/心神
+ * 专注/天生寿长）在升境当刻叠加；最后气血灵力回满。调用方负责
+ * 在调用前扣修为、调用后记日志与推进任务/法宝门槛对齐。
+ */
+export function ascendAfterBreakthrough(state: GameState, c: Character): void {
+  const realms = realmsFor(state.settings);
+  if (c.stageIdx < 3) c.stageIdx += 1;
+  else if (c.realmIdx < realms.length - 1) {
+    c.realmIdx += 1; c.stageIdx = 0;
+    const d = realms[c.realmIdx];
+    if (d) { c.lifespan = d.lifespan; c.maxHp = d.hp; c.maxMp = d.mp; }
+  }
+  if (c.talentIds.includes("t_sturdy")) c.maxHp += 20;
+  if (c.talentIds.includes("t_focus")) c.maxMp += 20;
+  if (c.talentIds.includes("t_longlife")) c.lifespan = Math.floor(c.lifespan * 1.2);
+  c.hp = c.maxHp; c.mp = c.maxMp;
+}
+
+// 雷劫化身的斗法敌手形态：tier/might 出自配置表 tribulation
+// .json，难度走既有 combatDc 口径；locations 恒空——它只在渡劫
+// 战里现身，不进任何地点的普通敌人池。
+export function tribulationEnemy(def: TribulationDef): EnemyDef {
+  return { id: def.id, name: def.name, desc: def.intro, tier: def.tier, might: def.might, locations: [] };
+}
+
+/**
+ * U-415 渡劫战结算（tribulation 动作在 battle 段调用）：与雷劫
+ * 化身交手，走 Q34 斗法 d20 链——掷骰（rollCheck 的 combat 系
+ * 统口径）、难度（combatDc）、败北伤势公式（14 + tier×9 + 败势
+ * 折算，封顶同 resolveFight）全与斗法本体一致；但按定稿口径
+ * 与 resolveFight 分开：①不另耗月份与行动点（成本已含在突破
+ * 动作里，故不走 resolveFight 内的 advanceActionMonths）；②胜
+ * 不发斗法缴获（升境本身即奖励，定稿不给额外奖励）；③败北气
+ * 血至少余 1、不调 checkDeath——渡劫失败绝不触发死亡/轮回/走
+ * 火入魔等任何既有惩罚链，最坏结果是退回本境大圆满 + 战斗
+ * 伤。功法施展涨熟练度与斗法本体同口径（gainTechniqueProfi-
+ * ciency，斗法即施展）。结算当刻 phase 转 settle 并落 won，
+ * 正式升境/退回在 concludeTribulation（劫后结算段）完成。
+ */
+export function settleTribulationFight(state: GameState): void {
+  const c = state.character;
+  if (!c || c.dead || !c.tribulation || c.tribulation.phase !== "battle") return;
+  const def = tribulationFor(c.tribulation.targetRealmIdx);
+  if (!def) { c.tribulation = null; return; }
+  const enemy = tribulationEnemy(def);
+  const dc = combatDc(enemy);
+  const roll = rollCheck(state, c, COMBAT_CHECK.attr, dc, 0, [], "normal", { system: "combat" });
+  const margin = roll.scaledMargin;
+  if (roll.success) {
+    c.tribulation.won = true;
+    const text = margin >= 40
+      ? `摧枯拉朽！你迎着万雷而上，将${enemy.name}生生打散——劫云为之倒卷。`
+      : `雷海之中你几度险些被轰落云头，终究站稳了——${enemy.name}的身影在雷光里淡去。`;
+    c.lastRoll = { label: `渡劫·${enemy.name}`, dice: roll.dice, bonus: roll.bonus, total: roll.total, dc: roll.dc, success: true, text, detail: roll.detail };
+    pushLog(state, c.lifeNo, "fight", `⚡ 渡劫战胜：${enemy.name}（判定明细：${roll.detail.text}，胜势 +${margin}）——雷劫已破，只待劫后结算正式升境。`);
+  } else {
+    const dmg = 14 + enemy.tier * 9 + Math.min(34, Math.floor(-margin / 2));
+    // 渡劫败北不致死：气血扣至多到余 1（雷劫留一线生机，定稿口径）。
+    c.hp = Math.max(1, c.hp - dmg);
+    c.tribulation.won = false;
+    const text = margin <= -40
+      ? `完全不是对手——${enemy.name}的雷罚如天倾，你被轰回地面，劫云缓缓散去。`
+      : `你撑到了最后一道雷，终究力竭——${enemy.name}收雷而退，这一劫，没渡过去。`;
+    c.lastRoll = { label: `渡劫·${enemy.name}`, dice: roll.dice, bonus: roll.bonus, total: roll.total, dc: roll.dc, success: false, text, detail: roll.detail };
+    pushLog(state, c.lifeNo, "fight", `⚡ 渡劫战败：${enemy.name}（判定明细：${roll.detail.text}，败势 ${margin}）：气血 −${dmg}（余 ${c.hp}）。雷劫退去，不伤性命——退回本境大圆满，详见劫后结算。`);
+  }
+  gainTechniqueProficiency(state, "combat");
+  c.tribulation.phase = "settle";
+}
+
+/**
+ * U-415 劫后结算（tribulation 动作在 settle 段调用）：胜——正式
+ * 升境（ascendAfterBreakthrough 单一路径）+ U-415 消耗点：破
+ * 境丹在此刻才消耗 1 颗（U-414 的「判定成功即消耗」自此改
+ * 为「渡劫成功、正式升境时消耗」；门槛在突破掷骰前已保证持
+ * 有 ≥1）+ 连环任务「突破」目标推进 + 法宝门槛对齐；判定成
+ * 功时清零的连败保底保持清零（突破至此真正完成）。败——退回
+ * 本境大圆满：不升境、破境丹不消耗、本次判定已扣的修为全额
+ * 退回（定稿：渡劫失败不扣修为）、连败保底按进入渡劫前的快
+ * 照恢复（不推进也不清空——保底只由突破判定失败推进）；气
+ * 血伤势保留（渡劫战的代价）。两种结局都清除渡劫状态、拦截
+ * 随之解除，玩家可重新攒修为冲关（败路修为已退回，可直接再
+ * 试突破判定 + 渡劫）。
+ */
+export function concludeTribulation(state: GameState): void {
+  const c = state.character;
+  if (!c || c.dead || !c.tribulation || c.tribulation.phase !== "settle") return;
+  const trib = c.tribulation;
+  const realms = realmsFor(state.settings);
+  const targetName = realms[trib.targetRealmIdx]?.name ?? "";
+  if (trib.won) {
+    const before = realmText(c, state.settings);
+    ascendAfterBreakthrough(state, c);
+    pushLog(state, c.lifeNo, "breakthrough", `🌩️ 劫后结算：雷劫渡尽，${before} → ${realmText(c, state.settings)}！自此正式踏入${targetName}境。`);
+    c.pills.brk = Math.max(0, c.pills.brk - 1);
+    pushLog(state, c.lifeNo, "breakthrough", `破境丹药力在渡劫中化尽，助你稳住新境——消耗破境丹 1 颗（丹药囊余 ${c.pills.brk} 颗）。`);
+    // U-407：大境界突破至此才算完成，推进连环任务的「突破」目标。
+    bumpQuests(state, "breakthrough", {});
+    // U-618：跨境后封存法宝可能达门槛，统一对齐自动解封。
+    syncArtifactGate(state, c);
+    if (c.realmIdx === realms.length - 1 && c.stageIdx === 3) {
+      pushLog(state, c.lifeNo, "breakthrough", "已至此界之巅——再进一步，便是渡劫飞升。（本团当前以此为顶点）");
+    }
+  } else {
+    c.cultivation += trib.spentCultivation;
+    c.breakFails = trib.breakFailsBefore;
+    pushLog(state, c.lifeNo, "breakthrough", `🌧️ 劫后结算：这一劫没能渡过，你退回${realmText(c, state.settings)}——境界未失、修为未损（本次冲关的修为已全额退回）、破境丹未消耗、连败保底不变。养好伤便可再次冲${targetName}：重新突破判定、再渡雷劫。`);
+  }
+  c.tribulation = null;
 }

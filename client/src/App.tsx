@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaTopScrim } from "./platform-client";
 import { api } from "./api";
-import type { ActKind, CommissionKind, DrawField, EconomyKind, PointsAttr, SectKind, SettingKey, SocialKind, State, TimedEventKind } from "./types";
+import type { ActKind, CommissionKind, DrawField, EconomyKind, PointsAttr, QuestKind, RandomExploreMode, RoundGoalKind, SectKind, SettingKey, SocialKind, State, TimedEventKind, TribulationStep } from "./types";
 import { TREE } from "./tree-data";
 import { GameRules } from "./GameRules";
 import { MainMenu } from "./MainMenu";
@@ -167,6 +167,11 @@ export function App() {
   const runPlanM = useMutation({ mutationFn: () => api.runQuickPlan({}), onSuccess: apply });
   const clearPlanM = useMutation({ mutationFn: () => api.clearQuickPlan({}), onSuccess: apply });
   const actM = useMutation({ mutationFn: (kind: ActKind) => api.act({ kind }), onSuccess: apply });
+  const tribulationM = useMutation({ mutationFn: (step: TribulationStep) => api.tribulation({ step }), onSuccess: apply });
+  const randomExploreM = useMutation({ mutationFn: (mode: RandomExploreMode) => api.randomExplore({ mode }), onSuccess: apply });
+  const startGridM = useMutation({ mutationFn: () => api.startGrid({}), onSuccess: apply });
+  const flipGridM = useMutation({ mutationFn: (idx: number) => api.flipGridCell({ cellIdx: idx }), onSuccess: apply });
+  const closeGridM = useMutation({ mutationFn: () => api.closeGrid({}), onSuccess: apply });
   const chooseM = useMutation({ mutationFn: (idx: number) => api.chooseOption({ optionIdx: idx }), onSuccess: apply });
   const routeM = useMutation({ mutationFn: (idx: number) => api.chooseRouteNode({ nodeIdx: idx }), onSuccess: apply });
   const abandonRouteM = useMutation({ mutationFn: () => api.abandonRoute({}), onSuccess: apply });
@@ -181,11 +186,14 @@ export function App() {
   const freeTechM = useMutation({ mutationFn: (techniqueId: string) => api.selectFreeTechnique({ techniqueId }), onSuccess: apply });
   const reincM = useMutation({ mutationFn: (name: string) => api.reincarnate(name ? { name } : {}), onSuccess: apply });
   const fightM = useMutation({ mutationFn: (id: string) => api.fight({ enemyId: id }), onSuccess: apply });
+  const bossM = useMutation({ mutationFn: () => api.challengeBreakthroughBoss({}), onSuccess: apply });
   const economyM = useMutation({ mutationFn: (kind: EconomyKind) => api.economy({ kind }), onSuccess: apply });
   const socialM = useMutation({ mutationFn: (a: { kind: SocialKind; relationId?: string }) => api.social(a.relationId ? { kind: a.kind, relationId: a.relationId } : { kind: a.kind }), onSuccess: apply });
   const forgeM = useMutation({ mutationFn: (tier: number) => api.forgeArtifact({ tier }), onSuccess: apply });
   const buyOreM = useMutation({ mutationFn: (tier: number) => api.buyOre({ tier }), onSuccess: apply });
   const commissionM = useMutation({ mutationFn: (a: { kind: CommissionKind; commissionId: string }) => api.commission(a), onSuccess: apply });
+  const questM = useMutation({ mutationFn: (a: { kind: QuestKind; questId: string; optionId?: string }) => api.quest(a.optionId ? { kind: a.kind, questId: a.questId, optionId: a.optionId } : { kind: a.kind, questId: a.questId }), onSuccess: apply });
+  const goalM = useMutation({ mutationFn: (a: { kind: RoundGoalKind; goalId?: string }) => api.roundGoal(a.goalId ? { kind: a.kind, goalId: a.goalId } : { kind: a.kind }), onSuccess: apply });
   const timedM = useMutation({ mutationFn: (a: { kind: TimedEventKind; timedId: string }) => api.timedEvent(a), onSuccess: apply });
   // 散功重开是幂等动作（重复执行结果相同），桥接失败时自动重试
   // 3 次——2026-11-20 用户实测 bug：主菜单输完「不后悔」点确认，
@@ -234,8 +242,14 @@ export function App() {
     } catch { /* 失败走全局报错回传；已恢复的条目以服务端为准，下次读取对齐 */ }
     setRestoringAll(false);
   }, [queryClient, restoringAll]);
-  const busy = settingM.isPending || createM.isPending || actM.isPending || chooseM.isPending || routeM.isPending || abandonRouteM.isPending || travelM.isPending || reincM.isPending || prepareM.isPending || allocateM.isPending || buyBoonM.isPending || resetDrawM.isPending || keepsakeM.isPending || buryM.isPending || jadeM.isPending || choiceM.isPending || drawTalentsM.isPending || sectM.isPending || planM.isPending || runPlanM.isPending || clearPlanM.isPending || fightM.isPending || economyM.isPending || socialM.isPending || commissionM.isPending || timedM.isPending || forgeM.isPending || buyOreM.isPending || freeTechM.isPending;
+  const busy = settingM.isPending || createM.isPending || actM.isPending || tribulationM.isPending || randomExploreM.isPending || startGridM.isPending || flipGridM.isPending || closeGridM.isPending || chooseM.isPending || routeM.isPending || abandonRouteM.isPending || travelM.isPending || reincM.isPending || prepareM.isPending || allocateM.isPending || buyBoonM.isPending || resetDrawM.isPending || keepsakeM.isPending || buryM.isPending || jadeM.isPending || choiceM.isPending || drawTalentsM.isPending || sectM.isPending || planM.isPending || runPlanM.isPending || clearPlanM.isPending || fightM.isPending || bossM.isPending || economyM.isPending || socialM.isPending || commissionM.isPending || questM.isPending || goalM.isPending || timedM.isPending || forgeM.isPending || buyOreM.isPending || freeTechM.isPending;
   const pendingKey: string | null =
+    tribulationM.isPending ? `tribulation:${tribulationM.variables}` :
+    bossM.isPending ? "boss" :
+    startGridM.isPending ? "grid:start" :
+    flipGridM.isPending ? `grid:flip:${flipGridM.variables}` :
+    closeGridM.isPending ? "grid:close" :
+    randomExploreM.isPending ? `rx:${randomExploreM.variables}` :
     actM.isPending ? `act:${actM.variables}` :
     chooseM.isPending ? `choose:${chooseM.variables}` :
     routeM.isPending ? `route:${routeM.variables}` :
@@ -244,6 +258,8 @@ export function App() {
     economyM.isPending ? `eco:${economyM.variables}` :
     socialM.isPending ? `social:${socialM.variables.kind}:${socialM.variables.relationId ?? ""}` :
     commissionM.isPending ? `commission:${commissionM.variables.kind}:${commissionM.variables.commissionId}` :
+    questM.isPending ? `quest:${questM.variables.kind}:${questM.variables.questId}` :
+    goalM.isPending ? `goal:${goalM.variables.kind}:${goalM.variables.goalId ?? ""}` :
     forgeM.isPending ? `forge:${forgeM.variables}` :
     buyOreM.isPending ? `buyore:${buyOreM.variables}` :
     timedM.isPending ? `timed:${timedM.variables.kind}:${timedM.variables.timedId}` :
@@ -263,7 +279,9 @@ export function App() {
   const state = stateQ.data;
   const boardProps = state ? {
     state, busy, pendingKey,
-    onAct: (k: ActKind) => actM.mutate(k), onChoose: (i: number) => chooseM.mutate(i),
+    onAct: (k: ActKind) => actM.mutate(k), onTribulation: (step: TribulationStep) => tribulationM.mutate(step), onRandomExplore: (mode: RandomExploreMode) => randomExploreM.mutate(mode),
+    onStartGrid: () => startGridM.mutate(), onFlipGridCell: (idx: number) => flipGridM.mutate(idx), onCloseGrid: () => closeGridM.mutate(),
+    onChoose: (i: number) => chooseM.mutate(i),
     onChooseRouteNode: (i: number) => routeM.mutate(i), onAbandonRoute: () => abandonRouteM.mutate(),
     onTravel: (id: string) => travelM.mutate(id), onBury: (id: string) => buryM.mutate(id), onJade: () => jadeM.mutate(),
     onPrepare: onPrepareStable, prepareFailed: prepareM.isError,
@@ -279,11 +297,14 @@ export function App() {
     onRunPlan: () => runPlanM.mutate(),
     onClearPlan: () => clearPlanM.mutate(),
     onFight: (id: string) => fightM.mutate(id),
+    onChallengeBoss: () => bossM.mutate(),
     onEconomy: (kind: EconomyKind) => economyM.mutate(kind),
     onSocial: (kind: SocialKind, relationId?: string) => socialM.mutate(relationId ? { kind, relationId } : { kind }),
     onForgeArtifact: (tier: number) => forgeM.mutate(tier),
     onBuyOre: (tier: number) => buyOreM.mutate(tier),
     onCommission: (kind: CommissionKind, commissionId: string) => commissionM.mutate({ kind, commissionId }),
+    onQuest: (kind: QuestKind, questId: string, optionId?: string) => questM.mutate(optionId ? { kind, questId, optionId } : { kind, questId }),
+    onRoundGoal: (kind: RoundGoalKind, goalId?: string) => goalM.mutate(goalId ? { kind, goalId } : { kind }),
     onTimedEvent: (kind: TimedEventKind, timedId: string) => timedM.mutate({ kind, timedId }),
   } : null;
   const settledCount = state ? TREE.filter((n) => state.settings[n.key].confirmed).length : 0;

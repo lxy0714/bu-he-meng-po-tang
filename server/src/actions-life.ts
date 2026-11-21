@@ -2,9 +2,9 @@
 // 下一世。从 actions.ts 原样拆分，规则未动。
 
 import { defineAction, z } from "./platform";
-import { ARTIFACTS, CURRENT_EVENT_VERSION, EVENT_PACKS, EVENT_RELEASES, NAME_POOL, NO_ROOT_ID, REINCARNATION_POINTS, ROOTS, TALENTS, TIME_COSTS, birthBoonById, defaultHiddenSlots, destinyById, locById, talentById, techById, techLayerText, treasureById } from "./data";
+import { ACTION_POINTS, ARTIFACTS, CURRENT_EVENT_VERSION, EVENT_PACKS, EVENT_RELEASES, NAME_POOL, NO_ROOT_ID, REINCARNATION_POINTS, ROOTS, TALENTS, TIME_COSTS, birthBoonById, defaultHiddenSlots, destinyById, locById, talentById, techById, techLayerText, treasureById } from "./data";
 import {
-applyBirthBoons, applyBirthBoost, applyCultivationLevels, applyTalentsOnCreate, artifactGate, defaultSecretRealmStates, grantArtifact, grantNoRootStarterTechnique, grantShards, imprintLabelFor, imprintTextFor, loadState, pushLog, realmText, recordTechniqueLearned, emptyCommissionState, emptyDailyState, emptySignInState, emptyTimedEventState, ensureCommissionBoard, ensureDailyBoard, ensureTimedBoard, realmsFor, rngForNext, saveState, shuffledEventDeck, weekKeyOf, type BirthBoost, type Character
+applyBirthBoons, applyBirthBoost, applyCultivationLevels, applyTalentsOnCreate, artifactGate, defaultSecretRealmStates, grantArtifact, grantNoRootStarterTechnique, grantShards, imprintLabelFor, imprintTextFor, loadState, pushLog, realmText, recordTechniqueLearned, emptyCommissionState, emptyDailyState, emptyQuestState, emptyRoundGoalState, emptySignInState, emptyTimedEventState, ensureCommissionBoard, ensureDailyBoard, ensureTimedBoard, realmsFor, rngForNext, saveState, shuffledEventDeck, weekKeyOf, type BirthBoost, type Character
 } from "./state";
 import { applyDestiny, buildReincarnation, drawThree, makeBirthDraw, makeFragments, resolveChoice, rollRatedTalents } from "./reincarnation";
 import type { GameState } from "./state";
@@ -141,11 +141,22 @@ export const lifeActions = {
         stones: 50, karma: 0, age: 16, lifespan: def.lifespan,
         // U-608 细时钟：累计月份自降生起算 = 降生年龄 × 每年月数。
         totalMonths: 16 * TIME_COSTS.monthsPerYear,
+        // U-409：行动点本世起算——满池、第 1 年。
+        actionPoints: ACTION_POINTS.annualCap, actionYear: 1,
+        // U-410：年度事件本世起算——第 1 年已记账（降生当年不触
+        // 发）、无排队，下一个跨年起每年恰一次。
+        annualEventYear: 1, annualEventQueued: false,
+        // U-416：灵力紊乱 debuff 本世起算（无紊乱）。
+        resonanceDisorderUntil: 0,
         locationId: "village",
         might: root.might, sense: root.sense, fortune: root.fortune, body: root.body,
         sealedMemory: q2Lock === "waste_root" || q2Lock === "artifact_only",
         memoryTier: 0,
         dead: false, deathCause: null, pendingEvent: null, lastRoll: null, route: null,
+        // U-412：翻格棋盘本世起算（无进行中棋盘）。
+        gridBoard: null,
+        // U-415：渡劫仪式本世起算（无进行中渡劫）。
+        tribulation: null,
         talentIds: [...draw.chosenTalents], techniqueId: null, legacyPoints: 0, jadeLayers: 0,
         weekKey: weekKeyOf(new Date()), groupCounts: {}, caveClaimedLife: 0,
         destinyId: "", sectRankId: "", sectContrib: 0,
@@ -153,6 +164,10 @@ export const lifeActions = {
         // U-395：第一世牌堆按当时最新投放版本落定（投放口径见 state.ts）。
         deckVersion: CURRENT_EVENT_VERSION,
         commissions: emptyCommissionState(),
+        // U-407：连环任务本世起算（无进行中、无已完成）。
+        quests: emptyQuestState(),
+        // U-408：单轮目标本世起算（未选目标、候选由读档补齐）。
+        roundGoal: emptyRoundGoalState(),
         timedEvents: emptyTimedEventState(),
         dailyCommissions: emptyDailyState(),
         signIns: emptySignInState(),
@@ -412,10 +427,21 @@ export const lifeActions = {
         age: 16, lifespan: def.lifespan, locationId: "village",
         // U-608 细时钟：新世累计月份同样自降生起算（不跨世累计）。
         totalMonths: 16 * TIME_COSTS.monthsPerYear,
+        // U-409：行动点随轮回回满——新世满池、第 1 年重新起算。
+        actionPoints: ACTION_POINTS.annualCap, actionYear: 1,
+        // U-410：年度事件随轮回重新计年——新世第 1 年已记账、无
+        // 排队，下一个跨年起每年恰一次。
+        annualEventYear: 1, annualEventQueued: false,
+        // U-416：灵力紊乱 debuff 本世起算（无紊乱）。
+        resonanceDisorderUntil: 0,
         might: root.might, sense: root.sense, fortune: root.fortune, body: root.body,
         sealedMemory: !memoryKept || state.settings.q2.value === "waste_root",
         memoryTier: memoryKept ? c.lifeNo : c.memoryTier,
         dead: false, deathCause: null, pendingEvent: null, lastRoll: null, route: null,
+        // U-412：翻格棋盘随轮回清空——上一世未收的棋盘不带进新世。
+        gridBoard: null,
+        // U-415：渡劫仪式随轮回清空——上一世未了的雷劫不带进新世。
+        tribulation: null,
         talentIds: nextTalents, techniqueId: effectiveCarryId,
         legacyPoints: c.legacyPoints + re.legacyEarned - keptCost + carryRefund,
         jadeLayers: c.jadeLayers,
@@ -427,6 +453,12 @@ export const lifeActions = {
         // 档）；上一世的牌堆版本在下方投放播报里与此对比。
         deckVersion: CURRENT_EVENT_VERSION,
         commissions: emptyCommissionState(),
+        // U-407：连环任务按世重置——未完成任务不跨世保留进度，已
+        // 完成只进上一世的历史记录，新世从空状态重新接取。
+        quests: emptyQuestState(),
+        // U-408：单轮目标按世重置——当前目标与进度不跨世保留，
+        // 新世从空状态重新选目标（候选由读档补齐）。
+        roundGoal: emptyRoundGoalState(),
         timedEvents: emptyTimedEventState(),
         dailyCommissions: emptyDailyState(),
         signIns: emptySignInState(),

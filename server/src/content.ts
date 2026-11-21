@@ -32,6 +32,8 @@ import destiniesJson from "./content/destinies.json" with { type: "json" };
 import reincarnationPointsJson from "./content/reincarnation-points.json" with { type: "json" };
 import dailyEventsJson from "./content/daily-events.json" with { type: "json" };
 import commissionsJson from "./content/commissions.json" with { type: "json" };
+import questsJson from "./content/quests.json" with { type: "json" };
+import roundGoalsJson from "./content/round-goals.json" with { type: "json" };
 import timedEventsJson from "./content/timed-events.json" with { type: "json" };
 import dailyCommissionsJson from "./content/daily-commissions.json" with { type: "json" };
 import signInsJson from "./content/sign-ins.json" with { type: "json" };
@@ -46,10 +48,17 @@ import techniqueMasteryJson from "./content/technique-mastery.json" with { type:
 import forgeJson from "./content/forge.json" with { type: "json" };
 import artifactSourcesJson from "./content/artifact-sources.json" with { type: "json" };
 import secretRealmsJson from "./content/secret-realms.json" with { type: "json" };
+import randomExploreJson from "./content/random-explore.json" with { type: "json" };
+import annualEventsJson from "./content/annual-events.json" with { type: "json" };
+import gridExploreJson from "./content/grid-explore.json" with { type: "json" };
+import breakthroughBossJson from "./content/breakthrough-boss.json" with { type: "json" };
+import tribulationJson from "./content/tribulation.json" with { type: "json" };
+import resonanceJson from "./content/resonance.json" with { type: "json" };
+import actionPointsJson from "./content/action-points.json" with { type: "json" };
 // U-376：事件池不在本文件加载——事件类型/schema/稀有度分档/分桶归属
 // 与五分文件合并都在 events-base.ts（事件组织法的基础文件），本文件
 // 只转发其导出，保持既有 import 路径不变；跨池引用自检仍在下方跑。
-import { EVENTS, EVENT_RARITY, eventRarityTier, type Effect, type RelSpec } from "./events-base";
+import { EVENTS, EVENT_RARITY, eventRarityTier, type Effect, type EventDef, type EventOptionDef, type RelSpec } from "./events-base";
 export { EVENTS, EVENT_LOOP, EVENT_RARITY, eventCostBlockReason, eventRarityTier, formatEffectGains, formatEventCost, loopDcFor, loopMultiplier, scaleEffectForLoop } from "./events-base";
 export type { Effect, EventDef, EventOptionDef, RelSpec } from "./events-base";
 
@@ -179,6 +188,63 @@ export interface CommissionsDef {
   maxActive: number;
   commissions: CommissionDef[];
 }
+
+// U-407 多阶段任务模型（通用任务引擎）：任务 = 多阶段 + 可分支 +
+// 多任务并行追踪，定义放本表（content/quests.json），进度（当前阶
+// 段 / 阶段内计数 / 分支选择 / 状态）放存档（state.ts 的 QuestState，
+// 本世制）。引擎只认目标类型 + 参数，不为每个任务手写逻辑：目标类
+// 型全部取自现有动作可观测的钩子（explore 在指定地点结算际遇 /
+// arrive 旅行抵达指定地点 / fight 在指定地点斗法获胜 / cultivate
+// 修炼 / craft 在指定地点做副职 / visit 拜访指定 NPC / breakthrough
+// 突破成功 / sectChore 在指定地点办宗门差事），推进在 state.ts 的
+// bumpQuests 一处，挂在各动作既有结算尾巴上与 bumpCommissions /
+// bumpTimedEvents 并行。阶段完成按 next 推进；带 branch 的阶段完成
+// 后停在分支点，玩家二选一（选项决定下一阶段走向，karma 与即时奖
+// 励在选择时落账）；无 next 又无 branch 的阶段是终点阶段，其完成
+// 即全链走完，回张贴处 claim 结算 finalReward 与 story（storyBy-
+// Branch 可按分支选择换结局文案）。单阶段任务（stages 只一条、无
+// next）同一模型即可表达，U-406 等后续项复用本引擎、不另写一套。
+// 奖励只用现有资源类型（QuestReward：灵石/修为/业力走既有 apply-
+// Effects、传承点 legacy 与丹药 pills 在 grantQuestReward 里落既有
+// 字段），量级与委托同档。U-388 委托板 / U-389 限时帖 / U-390 日
+// 常委托不迁移到本引擎，行为与代码路径一字未动。
+export type QuestObjectiveKind = "explore" | "arrive" | "fight" | "cultivate" | "craft" | "visit" | "breakthrough" | "sectChore";
+export interface QuestObjectiveDef { kind: QuestObjectiveKind; need: number; locationId?: string; npcId?: string }
+export interface QuestReward { stones?: number; cult?: number; karma?: number; legacy?: number; pills?: { heal?: number; cult?: number; brk?: number } }
+export interface QuestBranchOptionDef { id: string; label: string; desc: string; karma?: number; reward?: QuestReward; next: string }
+export interface QuestStageDef {
+  id: string; title: string; text: string;
+  objective: QuestObjectiveDef;
+  reward?: QuestReward;
+  branch?: { prompt: string; options: QuestBranchOptionDef[] };
+  next?: string;
+}
+export interface QuestDef {
+  id: string; title: string; brief: string; issuerNpc: string; boardLocationId: string;
+  stages: QuestStageDef[];
+  finalReward: QuestReward; story: string; storyByBranch?: Record<string, string>;
+}
+export interface QuestsDef { maxActive: number; quests: QuestDef[] }
+
+// U-408 单轮目标制：玩家每轮从随机给出的 candidateCount 个候选里
+// 选 1 个「本轮目标」，目标只做行为引导——不锁、不拦任何动作，未
+// 完成无惩罚，可随时放弃重选（候选重新随机）；完成瞬间发一份小
+// 额额外奖励（量级与 U-407 阶段奖同档或更低）并可再选新目标。目
+// 标类型全部取自现有动作可观测的钩子，与 U-407 任务引擎同口径：
+// explore 结算际遇 / arrive 旅行抵达 / fight 斗法获胜 / cultivate
+// 修炼（四者经 bumpQuests 的同一批调用点并行推进，见 state.ts 的
+// bumpRoundGoal），外加 hidden 触发隐藏发现（maybeHiddenDiscovery）/
+// ore 探索拾矿（maybeDropOre）/ page 学到残页功法（maybeDrop-
+// TechniquePage 等残页学会点）/ stonesGain 累计获得灵石（apply-
+// Effects 的灵石正增量）。进度放存档（state.ts 的 RoundGoalState，
+// 本世制、轮回清空）；定义放本表（content/round-goals.json）。
+export type RoundGoalKind = "explore" | "arrive" | "fight" | "cultivate" | "hidden" | "ore" | "page" | "stonesGain";
+export interface RoundGoalDef {
+  id: string; title: string; text: string;
+  objective: { kind: RoundGoalKind; need: number };
+  reward: QuestReward;
+}
+export interface RoundGoalsDef { candidateCount: number; goals: RoundGoalDef[] }
 
 // U-389 限时事件数值/内容配置表（来源 B-65《修真聊天群》，拆自 v1
 // U-47 的限时部分）：群友发布的限时帖——秘境探索 / 求丹 / 斗法约战
@@ -425,6 +491,40 @@ export interface TimeCostsDef {
   travelMonths: Record<string, number>;
 }
 
+// U-409 年度行动点（计划原文「每日行动点」按 Q37 细时钟适配为
+// 「每年」：游戏时钟只有月、没有日粒度，周期以角色年龄年计——
+// 累计月份每跨入新的一年池子回满）。口径（定稿）：修炼/突破/探
+// 索/斗法/副职/宗门差事/社交/旅行共用一个年度点数池，资源取舍
+// 本身就是玩法；点数只约束行动次数，不改任何动作的判定、收益
+// 与耗时数值（耗时在 time-costs.json、判定在 checks.ts，本表只
+// 定点数）。扣点时机 = 动作开始（与耗时口径一致，成败都扣）；
+// 点数不足时动作不可执行（服务端拦截 + 明示原因，客户端按钮置
+// 灰并标注耗点）。未列明的小动作（接取/领奖/购物/服丹/事件抉
+// 择/选目标等）一律 0 点、不在本表出现。刷新：跨入新的一年回
+// 满 annualCap、余点不结转（不可囤积），轮回开新世同样回满；
+// 刷新判定挂在 state.ts 的 advanceMonths（全游戏唯一时间推进
+// 口）与年份推导共用同一信号——U-410 年度事件同挂这一挂点、排
+// 在行动点刷新之后结算（见 state.ts 的 settleAnnualEventYear）。
+// 配额验算（annualCap = 40）：纯探索年——探索一程 3 个月、一
+// 年至多 4 程 × 10 点 = 40 点，恰与年度池齐平；修炼 12 个月
+// 一程、一年至多 1 次（20 点），长动作由时间先约束；斗法 1 个
+// 月/旅行 1–6 个月等短动作一年可走许多次，由行动点先约束
+// （斗法 6 点、旅行 4 点）——长短两头分别被时间与点数卡住，
+// 取舍成立。休整恒 0 点（加载自检锁死）：点数耗尽时仍可休整
+// 逐月消磨、跨年回满，永不死锁。状态存角色 actionPoints（余
+// 量）与 actionYear（当前年份序号，自降生起算、降生为第 1
+// 年），旧存档缺失时余量按满池补、年份按累计月份推导。
+export type ActionPointKey = "cultivate" | "breakthrough" | "explore" | "fight" | "craft" | "sectChore" | "social" | "travel" | "rest";
+export interface ActionPointsDef {
+  annualCap: number;
+  costs: Record<ActionPointKey, number>;
+}
+export const ACTION_POINT_KEYS: readonly ActionPointKey[] = ["cultivate", "breakthrough", "explore", "fight", "craft", "sectChore", "social", "travel", "rest"];
+export const ACTION_POINT_LABELS: Record<ActionPointKey, string> = {
+  cultivate: "修炼", breakthrough: "突破", explore: "探索", fight: "斗法",
+  craft: "副职", sectChore: "宗门差事", social: "社交", travel: "旅行", rest: "休整",
+};
+
 export interface ReincarnationPointsDef {
   grantByGrade: { S: number; A: number; B: number; C: number };
   attrCostPerPoint: number;
@@ -581,6 +681,50 @@ const commissionsSchema = z.strictObject({
   boardSize: num, maxActive: num,
   commissions: z.array(commissionSchema),
 });
+// U-407 连环任务：奖励只许既有资源键（灵石/修为/业力/传承点/丹
+// 药），正负与非空口径在加载自检里逐项核（业力可为负——分支抉择
+// 的代价，其余必须为正）；阶段图（next / branch.next 的指向、环、
+// 可达性）也在自检里核。
+const questRewardSchema = z.strictObject({
+  stones: num.optional(), cult: num.optional(), karma: num.optional(), legacy: num.optional(),
+  pills: z.strictObject({ heal: num.optional(), cult: num.optional(), brk: num.optional() }).optional(),
+});
+const questObjectiveSchema = z.strictObject({
+  kind: z.enum(["explore", "arrive", "fight", "cultivate", "craft", "visit", "breakthrough", "sectChore"]),
+  need: num, locationId: str.optional(), npcId: str.optional(),
+});
+const questStageSchema = z.strictObject({
+  id: str, title: str, text: str,
+  objective: questObjectiveSchema,
+  reward: questRewardSchema.optional(),
+  branch: z.strictObject({
+    prompt: str,
+    options: z.array(z.strictObject({
+      id: str, label: str, desc: str, karma: num.optional(),
+      reward: questRewardSchema.optional(), next: str,
+    })).min(2),
+  }).optional(),
+  next: str.optional(),
+});
+const questsSchema = z.strictObject({
+  maxActive: num,
+  quests: z.array(z.strictObject({
+    id: str, title: str, brief: str, issuerNpc: str, boardLocationId: str,
+    stages: z.array(questStageSchema).min(1),
+    finalReward: questRewardSchema, story: str,
+    storyByBranch: z.record(str, str).optional(),
+  })).min(1),
+});
+// U-408 单轮目标：目标类型限八种既有可观测钩子；奖励形状与任务
+// 奖励同一 schema（QuestReward），量级口径在加载自检里另核上限。
+const roundGoalsSchema = z.strictObject({
+  candidateCount: num,
+  goals: z.array(z.strictObject({
+    id: str, title: str, text: str,
+    objective: z.strictObject({ kind: z.enum(["explore", "arrive", "fight", "cultivate", "hidden", "ore", "page", "stonesGain"]), need: num }),
+    reward: questRewardSchema,
+  })).min(1),
+});
 // U-389 限时事件：声望段只许 bond（发布人既有关系情谊/仇怨）与 sect
 // （既有宗门贡献）两键，符号口径在加载自检里逐段核（接/成非负、
 // 不接/败非正，且每段至少一项非零——四段都必须真的影响声望）。
@@ -692,6 +836,16 @@ const timeCostsSchema = z.strictObject({
     fight: num, craft: num, sectChore: num, social: num,
   }),
   travelMonths: z.record(z.string(), num),
+});
+// U-409：年度行动点表 schema——年度上限 + 九类动作耗点（键集由
+// strictObject 锁死，多键/缺键即拦；取值范围与休整恒 0 的不死锁
+// 口径在加载自检里逐项核）。
+const actionPointsSchema = z.strictObject({
+  annualCap: num,
+  costs: z.strictObject({
+    cultivate: num, breakthrough: num, explore: num, fight: num,
+    craft: num, sectChore: num, social: num, travel: num, rest: num,
+  }),
 });
 const reincarnationPointsSchema = z.strictObject({
   grantByGrade: z.strictObject({ S: num, A: num, B: num, C: num }),
@@ -874,6 +1028,8 @@ export const DESTINIES: DestinyDef[] = load("destinies.json", z.array(destinySch
 export const REINCARNATION_POINTS: ReincarnationPointsDef = load("reincarnation-points.json", reincarnationPointsSchema, reincarnationPointsJson);
 export const DAILY_EVENTS: DailyEventsDef = load("daily-events.json", dailyEventsSchema, dailyEventsJson);
 export const COMMISSIONS: CommissionsDef = load("commissions.json", commissionsSchema, commissionsJson);
+export const QUESTS: QuestsDef = load("quests.json", questsSchema, questsJson);
+export const ROUND_GOALS: RoundGoalsDef = load("round-goals.json", roundGoalsSchema, roundGoalsJson);
 export const TIMED_EVENTS: TimedEventsDef = load("timed-events.json", timedEventsSchema, timedEventsJson);
 export const DAILY_COMMISSIONS: DailyCommissionsDef = load("daily-commissions.json", dailyCommissionsSchema, dailyCommissionsJson);
 export const SIGN_INS: SignInsDef = load("sign-ins.json", signInsSchema, signInsJson);
@@ -883,6 +1039,7 @@ export const EVENT_RELEASES: EventReleasesDef = load("event-releases.json", even
 export const LOCATION_DROPS: LocationDropsDef = load("location-drops.json", locationDropsSchema, locationDropsJson);
 export const EXPLORE_TUNING: ExploreTuningDef = load("explore-tuning.json", exploreTuningSchema, exploreTuningJson);
 export const TIME_COSTS: TimeCostsDef = load("time-costs.json", timeCostsSchema, timeCostsJson);
+export const ACTION_POINTS: ActionPointsDef = load("action-points.json", actionPointsSchema, actionPointsJson);
 export const CRAFT_SKILLS: CraftSkillsDef = load("craft-skills.json", craftSkillsSchema, craftSkillsJson);
 export const TECHNIQUE_MASTERY: TechniqueMasteryDef = load("technique-mastery.json", techniqueMasterySchema, techniqueMasteryJson);
 export const FORGE: ForgeDef = load("forge.json", forgeSchema, forgeJson);
@@ -893,6 +1050,373 @@ export const SECRET_REALMS: SecretRealmsDef = load("secret-realms.json", secretR
 // 秘境槽位/Boss 判定，探索流程与改前逐字一致）。
 export function secretRealmAt(locationId: string): SecretRealmDef | undefined {
   return SECRET_REALMS.realms.find((r) => r.locationId === locationId);
+}
+
+// ---------- U-402 随机探索（远征 / 探秘 / 试炼塔） ----------
+// 三类通用随机探索玩法（2026-11-21 定稿口径）：不绑定任何地点、
+// 无境界门槛，各走独立事件子池（content/random-explore.json，每
+// 类 8 桩、共 24 桩），点入即一次探索行动（耗时与地点探索同键
+// explore = 3 月），抽一桩摆成待决事件、走既有 chooseOption 结
+// 算链（Q34 探索 d80、U-377 代价选项照常）。与 U-401 三界秘境
+// 的区别：本池只是通用随机探索——产出只有普通资源（修为/灵石/
+// 材料），不给传承点、不掉法宝、不给稀有丹药槽位类奖励；三类
+// 只在事件文本与奖励配比上区分：远征偏灵石、探秘偏材料（选项
+// grant：矿石/功法残页/丹药，均为已有材料类型，结算在 state.ts
+// 的 settleRandomExploreGrant）、试炼塔偏修为。试炼塔不做层数
+// 进度（爬塔分类是 U-403 的内容组织，不在本项）。模式事件不入
+// 地点事件牌堆（EVENTS），地点探索的密度/隐藏埋点/U-401 槽位与
+// 结算尾巴（残页/拾矿/法宝掉落三掷）都不挂到模式探索上——两边
+// 互不干扰。结构与配比合法性由下方 schema + 加载自检把关。
+export type RandomExploreModeId = "expedition" | "delve" | "tower";
+export interface RandomExploreGrant { oreTier?: number; pill?: "heal" | "cult" | "brk"; pageTechId?: string }
+export interface RandomExploreOptionDef extends EventOptionDef { grant?: RandomExploreGrant }
+export interface RandomExploreEventDef {
+  id: string; title: string; desc: string; art: string; commonality: number;
+  options: RandomExploreOptionDef[];
+}
+export interface RandomExploreModeDef { id: RandomExploreModeId; label: string; events: RandomExploreEventDef[] }
+export interface RandomExploreDef { modes: RandomExploreModeDef[] }
+
+const rxEffectSchema = z.strictObject({
+  cult: num.optional(), hp: num.optional(), mp: num.optional(), stones: num.optional(),
+  karma: num.optional(), age: num.optional(), shard: num.optional(),
+});
+// U-377 代价结构与事件池同口径：只许五键、值须为负（加载自检复核）。
+const rxCostSchema = z.strictObject({
+  cult: num.optional(), hp: num.optional(), mp: num.optional(), stones: num.optional(), karma: num.optional(),
+});
+const rxGrantSchema = z.strictObject({
+  oreTier: z.number().int().min(1).optional(),
+  pill: z.enum(["heal", "cult", "brk"]).optional(),
+  pageTechId: str.optional(),
+});
+const rxOptionSchema = z.strictObject({
+  label: str, hint: str, attr: z.enum(["might", "sense", "fortune", "body"]), dc: num,
+  okText: z.string(), ok: rxEffectSchema, failText: z.string(), fail: rxEffectSchema,
+  cost: rxCostSchema.optional(),
+  grant: rxGrantSchema.optional(),
+});
+const rxEventSchema = z.strictObject({
+  id: str, title: str, desc: str, art: str, commonality: num,
+  options: z.array(rxOptionSchema).min(2).max(3),
+});
+const randomExploreSchema = z.strictObject({
+  modes: z.array(z.strictObject({
+    id: z.enum(["expedition", "delve", "tower"]), label: str,
+    events: z.array(rxEventSchema),
+  })),
+});
+
+export const RANDOM_EXPLORE: RandomExploreDef = load("random-explore.json", randomExploreSchema, randomExploreJson);
+// 模式事件的 EventDef 形态（供 presentDrawnEvent / chooseOption 的
+// 既有结算链按普通事件对待）：locations 恒为空——它们不属于任何
+// 地点，永不进地点牌堆（牌堆只由 EVENTS 建堆，与本表无关）。
+export const RANDOM_EXPLORE_EVENTS: EventDef[] = RANDOM_EXPLORE.modes.flatMap((m) =>
+  m.events.map((e) => ({ ...e, locations: [] as string[] })),
+);
+const RANDOM_EXPLORE_EVENT_BY_ID = new Map(RANDOM_EXPLORE_EVENTS.map((e) => [e.id, e]));
+export function randomExploreModeById(id: string): RandomExploreModeDef | undefined {
+  return RANDOM_EXPLORE.modes.find((m) => m.id === id);
+}
+export function randomExploreEventById(id: string): EventDef | undefined {
+  return RANDOM_EXPLORE_EVENT_BY_ID.get(id);
+}
+export function isRandomExploreEventId(id: string): boolean {
+  return RANDOM_EXPLORE_EVENT_BY_ID.has(id);
+}
+/** 某桩模式事件某个选项的材料附赠（成功时结算）；无附赠返回 undefined。 */
+export function randomExploreGrantFor(eventId: string, optionIdx: number): RandomExploreGrant | undefined {
+  for (const m of RANDOM_EXPLORE.modes) {
+    const ev = m.events.find((e) => e.id === eventId);
+    if (ev) return ev.options[optionIdx]?.grant;
+  }
+  return undefined;
+}
+
+// ---------- U-410 年度事件推演：年度大事件小池 ----------
+// 一年一回合（2026-11-21 定稿口径）：累计月份跨入新的一年时，
+// 固定排一次年度事件（触发点在 state.ts 的 settleAnnualEventYear，
+// 与 U-409 行动点刷新同挂 advanceMonths 的跨年信号——先刷行动
+// 点、再排年度事件）。抽池分两路：个人人生事件从现有全地点事
+// 件池（EVENTS）按年抽取（不绑当前地点、避开最近 3 个的避重口
+// 径沿用），外部大事件走本小池（content/annual-events.json，8
+// 桩：妖潮/灵潮汛/旱魃/宗门大比/坊市庆典/天狗食日/流星雨/瘟
+// 疫）；每年抽取时以 grandChancePct（配置，30%）的概率出大事件、
+// 其余出个人事件。大事件与个人事件同形：二选一、走既有待决事件
+// 机制与 chooseOption 结算链（Q34 探索 d80、U-377 代价照常），
+// 结算只用既有奖惩类型（灵石/修为/气血/法力/业力——成败效果不
+// 得带 shard/age：碎片是主线进度不是年度奖惩，age 会在结算中再
+// 推进时钟、与「年度事件不耗月份」口径冲突，加载自检双双拦
+// 下）；梗与意外只在文案里，不新增任何数值系统。年度事件不耗
+// 月份、不耗行动点（由时间流逝触发）。结构合法性由下方 schema
+// + 加载自检把关（恰 8 桩、id 不与 EVENTS/模式池撞车、稀有度权
+// 重与事件池同一把尺、代价与 U-377 同口径）。
+export interface AnnualEventsDef { grandChancePct: number; events: RandomExploreEventDef[] }
+
+const annualEventsSchema = z.strictObject({
+  grandChancePct: num,
+  events: z.array(rxEventSchema),
+});
+
+export const ANNUAL_EVENTS: AnnualEventsDef = load("annual-events.json", annualEventsSchema, annualEventsJson);
+// 大事件的 EventDef 形态（供待决事件构建与 chooseOption 结算链按
+// 普通事件对待）：locations 恒为空——它们不属于任何地点，永不
+// 进地点牌堆（牌堆只由 EVENTS 建堆，与本表无关）。
+export const ANNUAL_EVENT_DEFS: EventDef[] = ANNUAL_EVENTS.events.map((e) => ({ ...e, locations: [] as string[] }));
+const ANNUAL_EVENT_BY_ID = new Map(ANNUAL_EVENT_DEFS.map((e) => [e.id, e]));
+export function annualEventById(id: string): EventDef | undefined {
+  return ANNUAL_EVENT_BY_ID.get(id);
+}
+export function isAnnualEventId(id: string): boolean {
+  return ANNUAL_EVENT_BY_ID.has(id);
+}
+
+// ---------- U-414 禁地夺丹：大境界突破的破境丹门槛与禁地 Boss ----------
+// 大境界突破（境界序号递增：炼气→筑基→…→渡劫）做成目标事件：
+// 必须持有破境丹（丹药囊 pills.brk ≥ 1）才可突破，丹在突破成功
+// 时消耗 1 颗、失败不消耗；小境界（初期→中期→后期→大圆满）照
+// 旧、不需要丹。破境丹的既有来源（坊市丹药商店、U-401 黄泉秘境
+// 丹药槽、U-407 连环任务奖励等）全部保留，本项只加「持丹门槛 +
+// 禁地夺丹通道」：角色处于某境大圆满（下一步即大境界突破）时，
+// 可挑战对应禁地的 Boss 夺丹——Boss 按目标境界配表（本表 8 位，
+// 对应筑基至渡劫八个目标境界），tier/might 沿 U-401 秘境 Boss 的
+// 梯度口径（tier = 目标境界序号、might 每档 +6），战斗走既有斗
+// 法结算链（Q34 斗法 d20，resolveFight），胜负只决定是否拿到破
+// 境丹，不改突破成功率数值。挑战按一次斗法行动计（耗 1 个月 +
+// 斗法行动点 6 点，扣费/耗时在动作层走既有 fight 键）。门槛拦截
+// 与挑战结算在 state.ts（breakthroughPillBlockReason /
+// settleBreakthroughBossFight），动作入口在 actions-world.ts 的
+// challengeBreakthroughBoss。结构合法性由下方 schema + 加载自
+// 检把关（恰 8 位、目标境界 1..8 各一、tier 与目标境界一致、
+// might 正整数且随目标境界严格递增、id 不与敌手池/秘境 Boss
+// 撞车——resolveFight 按名号回认胜负，撞名会串认）。
+export interface BreakthroughBossDef {
+  id: string; targetRealm: number; placeName: string;
+  name: string; intro: string; tier: number; might: number;
+}
+export interface BreakthroughBossesDef { bosses: BreakthroughBossDef[] }
+
+const breakthroughBossSchema = z.strictObject({
+  id: str, targetRealm: num, placeName: str,
+  name: str, intro: str, tier: num, might: num,
+});
+const breakthroughBossesSchema = z.strictObject({
+  bosses: z.array(breakthroughBossSchema),
+});
+
+export const BREAKTHROUGH_BOSSES: BreakthroughBossesDef = load("breakthrough-boss.json", breakthroughBossesSchema, breakthroughBossJson);
+/** 按目标境界序号取禁地 Boss（1..8 = 筑基..渡劫）；无对应返回 undefined。 */
+export function breakthroughBossFor(targetRealm: number): BreakthroughBossDef | undefined {
+  return BREAKTHROUGH_BOSSES.bosses.find((b) => b.targetRealm === targetRealm);
+}
+
+// ---------- U-415 渡劫仪式：雷劫化身表 ----------
+// 大境界突破判定成功后不直接升境，先渡雷劫（定稿口径）：雷劫化
+// 身按目标境界配表（8 档对应筑基至渡劫），强度梯度略低于同档禁
+// 地 Boss（breakthrough-boss.json）——禁地夺丹是门槛、渡劫是仪式
+// 战，难度定位不同，此强弱关系由下方加载自检强制（同档 might
+// 必须严格小于禁地 Boss）。渡劫战走 Q34 斗法 d20 链（结算在
+// state.ts 的 settleTribulationFight：同链掷骰与败北伤势公式，
+// 但不另耗月份/行动点、不发斗法缴获、败北不致死——渡劫失败最
+// 坏只是退回本境大圆满 + 战斗伤）。intro 为「雷劫来临」段的叙
+// 事文案（化身登场），客户端仪式卡与日志直接展示。
+export interface TribulationDef {
+  id: string; targetRealm: number;
+  name: string; intro: string; tier: number; might: number;
+}
+export interface TribulationsDef { avatars: TribulationDef[] }
+
+const tribulationSchema = z.strictObject({
+  id: str, targetRealm: num,
+  name: str, intro: str, tier: num, might: num,
+});
+const tribulationsSchema = z.strictObject({
+  avatars: z.array(tribulationSchema),
+});
+
+export const TRIBULATIONS: TribulationsDef = load("tribulation.json", tribulationsSchema, tribulationJson);
+/** 按目标境界序号取雷劫化身（1..8 = 筑基..渡劫）；无对应返回 undefined。 */
+export function tribulationFor(targetRealm: number): TribulationDef | undefined {
+  return TRIBULATIONS.avatars.find((a) => a.targetRealm === targetRealm);
+}
+
+// ---------- U-416 属性共鸣 / 失衡 ----------
+// 属性配比的隐藏状态（2026-11-21 定稿口径）：只读现有四维（战
+// 力 / 神识 / 机缘 / 体魄，attrOf 口径、含天赋与法宝修正），不
+// 新增任何属性——四维最高 / 最低的比值 ≤ resonanceMaxRatio
+// （1.6）为「四象共鸣」，≥ imbalanceMinRatio（2.5）为「灵力失
+// 衡」，中间为「平稳」。状态本身实时计算、不落盘（state.ts 的
+// resonanceStateOf），属性一变状态即变；只有「灵力紊乱」
+// debuff 的到期月份落盘（Character.resonanceDisorderUntil）。
+// - 共鸣（隐藏效果）：修炼收益 +resonanceCultivateBonusPct%
+//   （与既有加成链同口径叠乘、日志可见）；探索时按 resonance-
+//   EncounterChancePct% 的概率把本程普通事件替换为共鸣奇遇
+//   （encounters 恰 3 桩专属小事件，文案扣「四象调和」，奖惩
+//   只用既有资源类型、不带 shard / age——口径与年度大事件同，
+//   加载自检逐项核）。
+// - 失衡：每次修炼 / 探索按 rampageChancePct% 的概率触发「灵
+//   力暴走」一次性事件（rampageEvent，二选一：强压 / 顺导，走
+//   既有待决事件卡 + chooseOption 结算链，但走 U-416 专属分
+//   支：气血损失钳制不致死、绝不调 checkDeath），结算后留下
+//   「灵力紊乱」debuff（持续 disorderMonths 个月：修炼收益
+//   −disorderCultivatePenaltyPct%，到期自动消散）。暴走与紊乱
+//   都只是事件内惩罚——绝不触发死亡 / 轮回 / Q35 走火入魔死亡
+//   口径 / 记忆规则中的任何一条。
+export interface ResonanceDef {
+  resonanceMaxRatio: number;
+  imbalanceMinRatio: number;
+  resonanceCultivateBonusPct: number;
+  resonanceEncounterChancePct: number;
+  rampageChancePct: number;
+  disorderMonths: number;
+  disorderCultivatePenaltyPct: number;
+  encounters: RandomExploreEventDef[];
+  rampageEvent: RandomExploreEventDef;
+}
+
+const resonanceSchema = z.strictObject({
+  resonanceMaxRatio: num, imbalanceMinRatio: num,
+  resonanceCultivateBonusPct: num, resonanceEncounterChancePct: num,
+  rampageChancePct: num, disorderMonths: num, disorderCultivatePenaltyPct: num,
+  encounters: z.array(rxEventSchema),
+  rampageEvent: rxEventSchema,
+});
+
+export const RESONANCE: ResonanceDef = load("resonance.json", resonanceSchema, resonanceJson);
+// 共鸣奇遇与暴走事件的 EventDef 形态（供待决事件构建与
+// chooseOption 结算链按普通事件对待）：locations 恒为空——它们
+// 不属于任何地点，永不进地点牌堆（牌堆只由 EVENTS 建堆）。
+export const RESONANCE_ENCOUNTER_DEFS: EventDef[] = RESONANCE.encounters.map((e) => ({ ...e, locations: [] as string[] }));
+export const RAMPAGE_EVENT_DEF: EventDef = { ...RESONANCE.rampageEvent, locations: [] as string[] };
+const RESONANCE_EVENT_BY_ID = new Map<string, EventDef>([
+  ...RESONANCE_ENCOUNTER_DEFS.map((e) => [e.id, e] as const),
+  [RAMPAGE_EVENT_DEF.id, RAMPAGE_EVENT_DEF],
+]);
+export function resonanceEventById(id: string): EventDef | undefined {
+  return RESONANCE_EVENT_BY_ID.get(id);
+}
+export function isResonanceEventId(id: string): boolean {
+  return RESONANCE_EVENT_BY_ID.has(id);
+}
+
+// ---------- U-412 每局翻格遇事件 ----------
+// 3×3 覆面棋盘（2026-11-21 定稿口径）：开一局 = 一次探索行动
+// （耗时与行动点与地点探索同键 explore = 3 个月 + 10 点，扣费在
+// 动作层走既有 advanceActionMonths / spendActionPoints），生成
+// 9 格覆面棋盘，格子类型在战斗 / 机缘 / 休整 / 狩猎 / 突破五类
+// 中按配置权重（content/grid-explore.json 的 cellWeights）随机
+// 分布。点翻一格亮出类型并触发对应事件：优先从现有事件池
+// EVENTS 按类型过滤抽取（分类规则见下方 gridEventTypesFor），
+// 走既有待决事件卡 + chooseOption 结算；某类在事件池中无可过
+// 滤项时用配置表里的专属兜底小事件表（fallbackEvents，每类 2
+// 桩，奖惩只用既有资源类型）。翻格本身不另耗月份 / 行动点（开
+// 局已付）。章节与诗句只做风味：棋盘标题按境界取 chapters（九
+// 境各一诗意章节名），每格翻开附 poems 里对应类型的一句短诗，
+// 不新增任何数值。与地点探索互不干扰：不掷地点密度、不占隐
+// 藏埋点、不动 U-401 槽位；翻格事件不挂地点探索尾部钩子（结
+// 算侧由待决事件的 grid 标记跳过，见 actions-play 的
+// chooseOption），抽取不读 eventDeck、不占牌堆名额。棋盘状态
+// 进存档（state.ts 的 GridBoardState），轮回清空。
+export type GridCellType = "combat" | "fortune" | "rest" | "hunt" | "breakthrough";
+export const GRID_CELL_TYPES: GridCellType[] = ["combat", "fortune", "rest", "hunt", "breakthrough"];
+export const GRID_CELL_LABELS: Record<GridCellType, string> = {
+  combat: "战斗", fortune: "机缘", rest: "休整", hunt: "狩猎", breakthrough: "突破",
+};
+export interface GridFallbackEventDef extends RandomExploreEventDef { cellType: GridCellType }
+export interface GridExploreDef {
+  cellWeights: Record<GridCellType, number>;
+  chapters: string[];
+  poems: Record<GridCellType, string[]>;
+  fallbackEvents: GridFallbackEventDef[];
+}
+
+const gridCellTypeSchema = z.enum(["combat", "fortune", "rest", "hunt", "breakthrough"]);
+const gridExploreSchema = z.strictObject({
+  cellWeights: z.strictObject({
+    combat: num, fortune: num, rest: num, hunt: num, breakthrough: num,
+  }),
+  chapters: z.array(str),
+  poems: z.strictObject({
+    combat: z.array(str), fortune: z.array(str), rest: z.array(str),
+    hunt: z.array(str), breakthrough: z.array(str),
+  }),
+  fallbackEvents: z.array(rxEventSchema.extend({ cellType: gridCellTypeSchema })),
+});
+
+export const GRID_EXPLORE: GridExploreDef = load("grid-explore.json", gridExploreSchema, gridExploreJson);
+// 兜底小事件的 EventDef 形态（供 chooseOption 结算链按普通事件
+// 对待）：locations 恒为空——它们只属于翻格棋盘，永不进地点牌堆。
+export const GRID_FALLBACK_EVENT_DEFS: EventDef[] = GRID_EXPLORE.fallbackEvents.map((e) => ({ ...e, locations: [] as string[] }));
+const GRID_FALLBACK_BY_ID = new Map(GRID_FALLBACK_EVENT_DEFS.map((e) => [e.id, e]));
+export function gridFallbackEventById(id: string): EventDef | undefined {
+  return GRID_FALLBACK_BY_ID.get(id);
+}
+export function isGridFallbackEventId(id: string): boolean {
+  return GRID_FALLBACK_BY_ID.has(id);
+}
+/** 某类格子的兜底小事件（配置表序）；该类未配兜底时为空数组。 */
+export function gridFallbackEventsFor(type: GridCellType): EventDef[] {
+  return GRID_EXPLORE.fallbackEvents
+    .filter((e) => e.cellType === type)
+    .flatMap((e) => {
+      const def = GRID_FALLBACK_BY_ID.get(e.id);
+      return def ? [def] : [];
+    });
+}
+/** 棋盘章节名：按境界序号取（越界钳到最后一章），九境各一章。 */
+export function gridChapterFor(realmIdx: number): string {
+  const idx = Math.max(0, Math.min(realmIdx, GRID_EXPLORE.chapters.length - 1));
+  return GRID_EXPLORE.chapters[idx] ?? "";
+}
+/** 某类格子的诗句：按序号轮取（同一类内轮换，不新增数值）。 */
+export function gridPoemFor(type: GridCellType, n: number): string {
+  const lines = GRID_EXPLORE.poems[type];
+  if (lines.length === 0) return "";
+  return lines[Math.abs(Math.floor(n)) % lines.length] ?? "";
+}
+
+// U-412 格子类型过滤：把现有事件池的每桩事件按内容归类到五类
+// 格子（可多归——一桩事件可同时是多个类型的候选，抽取时按格子
+// 类型取候选集）。归类只读事件自身的标题 / 描述 / 选项标签与成
+// 败效果签名，不改事件本体、不动牌堆：
+// - 战斗：含斗法 / 对决 / 敌手类字眼，或有高难战力选项；
+// - 狩猎：含妖兽 / 猎杀类字眼；
+// - 休整：含休憩类字眼，或有可观的气血 / 法力恢复选项；
+// - 突破：含指点 / 感悟类字眼，或有大额修为选项；
+// - 机缘：含宝物 / 遗藏类字眼，或有大额灵石 / 碎片选项。
+// 排除项（不进翻格池）：三界秘境专属事件（sr_ 前缀——地点专属
+// 内容，且前置事件与 U-401 Boss 惊动绑定，翻格不碰）、接管洞府
+// 事件 cave_takeover（地点专属结算）、带 loop 见好就收选项的事
+// 件（加圈抉择链不带 grid 标记，混入会串结算口径）。
+const GRID_TYPE_KEYWORDS: Record<GridCellType, string[]> = {
+  combat: ["斗法", "对决", "挑战", "切磋", "攻关", "魔修", "魔潮", "斥候", "晋升战", "守灵", "拦路", "巡逻", "比试", "决斗"],
+  fortune: ["藏宝", "遗府", "遗泽", "残图", "传承线索", "商队"],
+  rest: ["避雨", "听书", "钟声", "头香", "沐浴", "木屋", "甘霖", "灵雨", "滴水", "茶摊", "垂钓"],
+  hunt: ["妖兽", "兽潮", "兽王", "猎杀", "妖蟒", "老蛟", "蜂巢", "灵兽", "雪灵", "妖"],
+  breakthrough: ["指点", "论道", "考校", "古铭", "经卷", "托梦", "传承", "炼体", "残局", "感悟", "顿悟", "梦"],
+};
+export function gridEventEligible(ev: EventDef): boolean {
+  if (ev.id.startsWith("sr_")) return false;
+  if (ev.id === "cave_takeover") return false;
+  if (ev.options.some((o) => o.loop)) return false;
+  return true;
+}
+export function gridEventTypesFor(ev: EventDef): GridCellType[] {
+  if (!gridEventEligible(ev)) return [];
+  const text = `${ev.title} ${ev.desc} ${ev.options.map((o) => o.label).join(" ")}`;
+  const out = new Set<GridCellType>();
+  for (const t of GRID_CELL_TYPES) {
+    if (GRID_TYPE_KEYWORDS[t].some((k) => text.includes(k))) out.add(t);
+  }
+  if (ev.options.some((o) => (o.ok.hp ?? 0) >= 15 || (o.ok.mp ?? 0) >= 15)) out.add("rest");
+  if (ev.options.some((o) => (o.ok.cult ?? 0) >= 45)) out.add("breakthrough");
+  if (ev.options.some((o) => (o.ok.stones ?? 0) >= 45 || (o.ok.shard ?? 0) > 0)) out.add("fortune");
+  if (ev.options.some((o) => o.attr === "might" && o.dc >= 85)) out.add("combat");
+  return [...out];
+}
+/** 某类格子在现有事件池中的候选事件（翻格抽取的主池）。 */
+export function gridEventPoolFor(type: GridCellType): EventDef[] {
+  return EVENTS.filter((e) => gridEventTypesFor(e).includes(type));
 }
 
 // U-464：按阶位取矿石行（未知阶位返回 undefined，调用方不结算）。
@@ -1040,6 +1564,13 @@ export function imprintValuesFor(t: number, tech: TechDef): { startPoints: numbe
 export function commissionById(id: string): CommissionDef | undefined {
   return COMMISSIONS.commissions.find((d) => d.id === id);
 }
+export function questById(id: string): QuestDef | undefined {
+  return QUESTS.quests.find((q) => q.id === id);
+}
+// U-408：按 id 取单轮目标定义（未知 id 返回 undefined，调用方不结算）。
+export function roundGoalById(id: string): RoundGoalDef | undefined {
+  return ROUND_GOALS.goals.find((g) => g.id === id);
+}
 
 // U-389：按 id 取限时帖定义（未知 id 返回 undefined，调用方不结算）。
 export function timedEventById(id: string): TimedEventDef | undefined {
@@ -1161,6 +1692,20 @@ export function travelMonthsTo(locationId: string): number {
   return TIME_COSTS.travelMonths[locationId] ?? 1;
 }
 
+// U-409：降生时的累计月份（降生年龄 16 岁 × 每年月数，与
+// actions-life 两处构造点的 totalMonths 初值同一口径）——年份序
+// 号自此起算：降生所在的那一年为第 1 年。
+export const BIRTH_TOTAL_MONTHS = 16 * 12;
+// U-409：累计月份 → 当前年份序号（自降生起算）。年份是行动点刷
+// 新的唯一信号：advanceMonths 推进后年份变大即跨入新的一年（见
+// state.ts 的 settleActionPointYear）；旧存档的 actionYear 缺失
+// 时由存档字段注册表按同一函数推导。累计月份不足降生值（理论
+// 不达）时钳到第 1 年。
+export function actionYearFor(totalMonths: number): number {
+  const m = Number.isFinite(totalMonths) ? totalMonths : BIRTH_TOTAL_MONTHS;
+  return Math.max(1, Math.floor((m - BIRTH_TOTAL_MONTHS) / TIME_COSTS.monthsPerYear) + 1);
+}
+
 // U-002：本世评级 → 本次轮回结算发放的轮回点（档位出自配置表；
 // 未知评级不发放，不静默给档）。
 export function reincarnationPointsForGrade(grade: string): number {
@@ -1265,6 +1810,111 @@ function assertContentIntegrity(): void {
     const rewardVals = Object.values(d.reward);
     if (rewardVals.length === 0 || rewardVals.some((v) => typeof v !== "number" || !(v > 0))) throw bad(`commission ${d.id} reward must have positive values`);
     if (d.relOk && !npcIds.has(d.relOk.npc)) throw bad(`commission ${d.id} references unknown relOk npc ${d.relOk.npc}`);
+  }
+  // U-407：连环任务自检——同时可接数为正整数；任务 id 唯一，发
+  // 布人必须是现有 NPC、张贴处必须是现有地点；每条任务至少一个
+  // 阶段、阶段 id 在任务内唯一；目标次数为正整数，目标地点（若给）
+  // 必须是现有地点，visit 目标必须给 npcId 且必须是现有 NPC，
+  // npcId 给了也必须存在，sectChore 目标地点必须是青云山门（差事
+  // 只能在山门办）；奖励（阶段/全链/分支即时）至少一项、除业力外
+  // 各项为正数（业力可为负——分支抉择的代价，但不得为 0）；带
+  // branch 的阶段不得再带 next，分支至少两个选项、选项 id 唯一；
+  // 阶段图自首阶段起全部可达、无环、至少有一个终点阶段（无 next
+  // 又无 branch），storyByBranch 的键必须是某个分支选项 id。
+  if (!Number.isInteger(QUESTS.maxActive) || QUESTS.maxActive <= 0) throw bad("quests maxActive must be a positive integer");
+  unique("quests", QUESTS.quests.map((q) => q.id));
+  const checkQuestReward = (qid: string, where: string, r: QuestReward) => {
+    const parts: [string, number | undefined][] = [
+      ["stones", r.stones], ["cult", r.cult], ["legacy", r.legacy],
+      ["pills.heal", r.pills?.heal], ["pills.cult", r.pills?.cult], ["pills.brk", r.pills?.brk],
+    ];
+    let any = false;
+    for (const [k, v] of parts) {
+      if (v === undefined) continue;
+      any = true;
+      if (!Number.isInteger(v) || v <= 0) throw bad(`quest ${qid} ${where} reward ${k} must be a positive integer`);
+    }
+    if (r.karma !== undefined) {
+      any = true;
+      if (!Number.isInteger(r.karma) || r.karma === 0) throw bad(`quest ${qid} ${where} reward karma must be a nonzero integer`);
+    }
+    if (!any) throw bad(`quest ${qid} ${where} reward must not be empty`);
+  };
+  for (const q of QUESTS.quests) {
+    if (!npcIds.has(q.issuerNpc)) throw bad(`quest ${q.id} references unknown issuer npc ${q.issuerNpc}`);
+    if (!locIds.has(q.boardLocationId)) throw bad(`quest ${q.id} references unknown board location ${q.boardLocationId}`);
+    if (q.stages.length === 0) throw bad(`quest ${q.id} must have at least one stage`);
+    unique(`quest ${q.id} stages`, q.stages.map((s) => s.id));
+    const stageIds = new Set(q.stages.map((s) => s.id));
+    const branchOptionIds = new Set<string>();
+    for (const s of q.stages) {
+      const o = s.objective;
+      if (!Number.isInteger(o.need) || o.need <= 0) throw bad(`quest ${q.id} stage ${s.id} objective need must be a positive integer`);
+      if (o.locationId !== undefined && !locIds.has(o.locationId)) throw bad(`quest ${q.id} stage ${s.id} references unknown objective location ${o.locationId}`);
+      if (o.npcId !== undefined && !npcIds.has(o.npcId)) throw bad(`quest ${q.id} stage ${s.id} references unknown objective npc ${o.npcId}`);
+      if (o.kind === "visit" && !o.npcId) throw bad(`quest ${q.id} stage ${s.id} visit objective requires npcId`);
+      if (o.kind === "sectChore" && o.locationId !== "sect") throw bad(`quest ${q.id} stage ${s.id} sectChore objective must target sect`);
+      if (s.reward) checkQuestReward(q.id, `stage ${s.id}`, s.reward);
+      if (s.branch && s.next !== undefined) throw bad(`quest ${q.id} stage ${s.id} must not have both branch and next`);
+      if (s.next !== undefined && !stageIds.has(s.next)) throw bad(`quest ${q.id} stage ${s.id} next references unknown stage ${s.next}`);
+      if (s.branch) {
+        if (s.branch.options.length < 2) throw bad(`quest ${q.id} stage ${s.id} branch needs at least two options`);
+        unique(`quest ${q.id} stage ${s.id} branch options`, s.branch.options.map((op) => op.id));
+        for (const op of s.branch.options) {
+          branchOptionIds.add(op.id);
+          if (!stageIds.has(op.next)) throw bad(`quest ${q.id} stage ${s.id} branch option ${op.id} next references unknown stage ${op.next}`);
+          if (op.karma !== undefined && (!Number.isInteger(op.karma) || op.karma === 0)) throw bad(`quest ${q.id} stage ${s.id} branch option ${op.id} karma must be a nonzero integer`);
+          if (op.reward) checkQuestReward(q.id, `stage ${s.id} branch option ${op.id}`, op.reward);
+        }
+      }
+    }
+    checkQuestReward(q.id, "final", q.finalReward);
+    if (q.storyByBranch) for (const k of Object.keys(q.storyByBranch)) {
+      if (!branchOptionIds.has(k)) throw bad(`quest ${q.id} storyByBranch key ${k} is not a branch option id`);
+    }
+    // 阶段图：自首阶段 DFS——全部阶段可达、无环、至少一个终点。
+    const byStageId = new Map(q.stages.map((s) => [s.id, s]));
+    const edgesOf = (s: QuestStageDef): string[] => s.branch ? s.branch.options.map((op) => op.next) : s.next !== undefined ? [s.next] : [];
+    const seen = new Set<string>();
+    const inStack = new Set<string>();
+    let hasTerminal = false;
+    const dfs = (sid: string): void => {
+      if (inStack.has(sid)) throw bad(`quest ${q.id} stage graph has a cycle at ${sid}`);
+      if (seen.has(sid)) return;
+      const st = byStageId.get(sid);
+      if (!st) return;
+      seen.add(sid); inStack.add(sid);
+      const edges = edgesOf(st);
+      if (edges.length === 0) hasTerminal = true;
+      for (const e of edges) dfs(e);
+      inStack.delete(sid);
+    };
+    const first = q.stages[0];
+    if (first) dfs(first.id);
+    if (seen.size !== q.stages.length) throw bad(`quest ${q.id} has unreachable stages`);
+    if (!hasTerminal) throw bad(`quest ${q.id} has no terminal stage`);
+  }
+  // U-408：单轮目标自检——候选数为正整数且不得超过目标池大小
+  //（抽不出足数不重复候选即配置错误）；目标 id 唯一；目标次数为
+  // 正整数；八种目标类型每种至少一条（候选随机才不至于长期缺类）；
+  // 奖励走任务奖励同一核查（至少一项、除业力外为正数），另核量级
+  // 上限：单轮目标只是引导，奖励须在 U-407 阶段奖同档或更低——
+  // 灵石 ≤ 40、修为 ≤ 25，且不得给传承点/丹药（那是任务与秘境的
+  // 地盘）。
+  if (!Number.isInteger(ROUND_GOALS.candidateCount) || ROUND_GOALS.candidateCount <= 0) throw bad("round-goals candidateCount must be a positive integer");
+  if (ROUND_GOALS.goals.length < ROUND_GOALS.candidateCount) throw bad("round-goals pool smaller than candidateCount");
+  unique("round-goals", ROUND_GOALS.goals.map((g) => g.id));
+  const goalKindsSeen = new Set<string>();
+  for (const g of ROUND_GOALS.goals) {
+    goalKindsSeen.add(g.objective.kind);
+    if (!Number.isInteger(g.objective.need) || g.objective.need <= 0) throw bad(`round-goal ${g.id} objective need must be a positive integer`);
+    checkQuestReward(g.id, "goal", g.reward);
+    if (g.reward.stones !== undefined && g.reward.stones > 40) throw bad(`round-goal ${g.id} reward stones exceeds the small-reward cap 40`);
+    if (g.reward.cult !== undefined && g.reward.cult > 25) throw bad(`round-goal ${g.id} reward cult exceeds the small-reward cap 25`);
+    if (g.reward.legacy !== undefined || g.reward.pills !== undefined) throw bad(`round-goal ${g.id} reward must not grant legacy points or pills`);
+  }
+  for (const k of ["explore", "arrive", "fight", "cultivate", "hidden", "ore", "page", "stonesGain"]) {
+    if (!goalKindsSeen.has(k)) throw bad(`round-goals pool has no goal of kind ${k}`);
   }
   // U-389：限时事件自检——与委托板同一批引用完整性（发布人/张贴处/
   // 目标地点/差事地点），另加限时口径：接取时限（limitDays）与挂
@@ -1492,6 +2142,17 @@ function assertContentIntegrity(): void {
   for (const l of LOCATIONS) {
     if (!(l.id in TIME_COSTS.travelMonths)) throw bad(`time-costs travelMonths missing location ${l.id}`);
   }
+  // U-409：年度行动点表自检——年度上限为正整数；九类耗点键集恰
+  // 好（schema 已锁键集，这里核取值）：每类为 [0, annualCap] 的
+  // 整数（单项耗点不得超过整池，否则该动作永远做不了）；休整
+  // 必须恒为 0——这是「点数耗尽不死锁」的结构保证（休整逐月推
+  // 进、跨年回满），配置改坏即拒绝加载。
+  if (!Number.isInteger(ACTION_POINTS.annualCap) || ACTION_POINTS.annualCap <= 0) throw bad(`action-points annualCap must be a positive integer (got ${ACTION_POINTS.annualCap})`);
+  for (const k of ACTION_POINT_KEYS) {
+    const v = ACTION_POINTS.costs[k];
+    if (!Number.isInteger(v) || v < 0 || v > ACTION_POINTS.annualCap) throw bad(`action-points cost ${k} must be an integer in [0, ${ACTION_POINTS.annualCap}] (got ${v})`);
+  }
+  if (ACTION_POINTS.costs.rest !== 0) throw bad(`action-points cost rest must be exactly 0 (rest is the never-deadlock valve; got ${ACTION_POINTS.costs.rest})`);
   // U-002：轮回点配置表自检——发放档位与价格必须为正整数。
   const rp = REINCARNATION_POINTS;
   for (const [k, v] of Object.entries({ ...rp.grantByGrade, attrCostPerPoint: rp.attrCostPerPoint, attrCapPerAttr: rp.attrCapPerAttr, resetCost: rp.resetCost })) {
@@ -1687,6 +2348,240 @@ function assertContentIntegrity(): void {
     if (!ARTIFACTS.some((a) => a.minRealm === b.artifactMinRealm)) throw bad(`secret-realms boss ${b.id} artifactMinRealm ${b.artifactMinRealm} has no artifacts in the pool`);
     checkFallback(`boss ${b.id}`, b.occupiedFallback);
   }
+  // U-402：随机探索配置表自检——三类齐备（远征/探秘/试炼塔）、每
+  // 类恰 8 桩；事件 id 池内唯一且不与地点事件池（EVENTS）撞车
+  // （chooseOption 按 id 查表，撞车会串池）；稀有度权重与事件池
+  // 同一把尺（EVENT_RARITY 按最高选项难度分档）；产出红线：成
+  // 败效果不得带 shard（前世线索是主线进度、不是普通资源），
+  // 选项不得带 loop（加圈抉择的查表只认 EVENTS，模式池不挂此
+  // 模板）；代价结构与 U-377 同口径（非空、各项为负）；材料附
+  // 赠只能引用已有材料：矿石阶位须在锻造表里、残页功法须在功
+  // 法池里；配比红线：远征成功灵石总量须大于修为总量的两倍、
+  // 试炼塔反之、探秘至少 6 个选项带材料附赠——配比写反或写平
+  // 在加载时即拦下。
+  const rx = RANDOM_EXPLORE;
+  const rxModeIds = rx.modes.map((m) => m.id);
+  for (const want of ["expedition", "delve", "tower"] as const) {
+    if (!rxModeIds.includes(want)) throw bad(`random-explore missing mode ${want}`);
+  }
+  if (rx.modes.length !== 3) throw bad(`random-explore must define exactly 3 modes (got ${rx.modes.length})`);
+  unique("random-explore.modes", rxModeIds);
+  const deckIds = new Set(EVENTS.map((e) => e.id));
+  const forgeTiers = new Set(FORGE.tiers.map((t) => t.tier));
+  const rxTechIds = new Set(TECHNIQUES.map((t) => t.id));
+  const allRxIds: string[] = [];
+  for (const m of rx.modes) {
+    if (m.events.length !== 8) throw bad(`random-explore mode ${m.id} must have exactly 8 events (got ${m.events.length})`);
+    let stonesSum = 0;
+    let cultSum = 0;
+    let grantCount = 0;
+    for (const ev of m.events) {
+      allRxIds.push(ev.id);
+      if (deckIds.has(ev.id)) throw bad(`random-explore event ${ev.id} collides with a deck event id`);
+      const tier = eventRarityTier({ ...ev, locations: [] });
+      if (ev.commonality !== EVENT_RARITY.weights[tier]) throw bad(`random-explore event ${ev.id} commonality ${ev.commonality} does not match rarity tier ${tier} weight ${EVENT_RARITY.weights[tier]}`);
+      for (const opt of ev.options) {
+        if (opt.ok.shard || opt.fail.shard) throw bad(`random-explore event ${ev.id} option "${opt.label}" carries shard (mode events pay out ordinary resources only)`);
+        if (opt.cost !== undefined) {
+          const entries = Object.entries(opt.cost).filter(([, v]) => v !== undefined);
+          if (entries.length === 0) throw bad(`random-explore event ${ev.id} option "${opt.label}" has an empty cost`);
+          for (const [k, v] of entries) {
+            if (typeof v !== "number" || !(v < 0)) throw bad(`random-explore event ${ev.id} option "${opt.label}" cost.${k} must be negative (got ${v})`);
+          }
+        }
+        stonesSum += Math.max(0, opt.ok.stones ?? 0);
+        cultSum += Math.max(0, opt.ok.cult ?? 0);
+        if (opt.grant) {
+          grantCount += 1;
+          if (opt.grant.oreTier !== undefined && !forgeTiers.has(opt.grant.oreTier)) throw bad(`random-explore event ${ev.id} option "${opt.label}" grants unknown ore tier ${opt.grant.oreTier}`);
+          if (opt.grant.pageTechId !== undefined && !rxTechIds.has(opt.grant.pageTechId)) throw bad(`random-explore event ${ev.id} option "${opt.label}" grants unknown technique page ${opt.grant.pageTechId}`);
+        }
+      }
+    }
+    if (m.id === "expedition" && !(stonesSum > cultSum * 2)) throw bad(`random-explore expedition must lean to stones (ok stones ${stonesSum} vs cult ${cultSum})`);
+    if (m.id === "tower" && !(cultSum > stonesSum * 2)) throw bad(`random-explore tower must lean to cultivation (ok cult ${cultSum} vs stones ${stonesSum})`);
+    if (m.id === "delve" && grantCount < 6) throw bad(`random-explore delve must carry at least 6 material grants (got ${grantCount})`);
+  }
+  unique("random-explore.events", allRxIds);
+
+  // U-410 年度大事件小池自检：恰 8 桩；出大事件概率为 0–100 的
+  // 整数（百分点）；事件 id 池内唯一且不与地点事件池（EVENTS）、
+  // 随机探索模式池撞车（chooseOption 按 id 查表，撞车会串池）；
+  // 稀有度权重与事件池同一把尺（EVENT_RARITY 按最高选项难度分
+  // 档）；产出红线：成败效果只许既有奖惩五键（灵石/修为/气血/
+  // 法力/业力），不得带 shard（主线进度）与 age（结算中再推进
+  // 时钟，与「年度事件不耗月份」冲突）；代价结构与 U-377 同口
+  // 径（非空、只许五键、各项为负）。
+  const ae = ANNUAL_EVENTS;
+  if (!Number.isInteger(ae.grandChancePct) || ae.grandChancePct < 0 || ae.grandChancePct > 100) throw bad(`annual-events grandChancePct must be an integer in [0, 100] (got ${ae.grandChancePct})`);
+  if (ae.events.length !== 8) throw bad(`annual-events must define exactly 8 grand events (got ${ae.events.length})`);
+  const aeIds: string[] = [];
+  for (const ev of ae.events) {
+    aeIds.push(ev.id);
+    if (deckIds.has(ev.id)) throw bad(`annual-events event ${ev.id} collides with a deck event id`);
+    if (RANDOM_EXPLORE_EVENT_BY_ID.has(ev.id)) throw bad(`annual-events event ${ev.id} collides with a random-explore event id`);
+    const tier = eventRarityTier({ ...ev, locations: [] });
+    if (ev.commonality !== EVENT_RARITY.weights[tier]) throw bad(`annual-events event ${ev.id} commonality ${ev.commonality} does not match rarity tier ${tier} weight ${EVENT_RARITY.weights[tier]}`);
+    for (const opt of ev.options) {
+      for (const eff of [opt.ok, opt.fail]) {
+        if (eff.shard) throw bad(`annual-events event ${ev.id} option "${opt.label}" carries shard (grand events pay out ordinary resources only)`);
+        if (eff.age) throw bad(`annual-events event ${ev.id} option "${opt.label}" carries age (annual events must not advance the clock)`);
+      }
+      if (opt.cost !== undefined) {
+        const entries = Object.entries(opt.cost).filter(([, v]) => v !== undefined);
+        if (entries.length === 0) throw bad(`annual-events event ${ev.id} option "${opt.label}" has an empty cost`);
+        for (const [k, v] of entries) {
+          if (typeof v !== "number" || !(v < 0)) throw bad(`annual-events event ${ev.id} option "${opt.label}" cost.${k} must be negative (got ${v})`);
+        }
+      }
+    }
+  }
+  unique("annual-events.events", aeIds);
+
+  // U-412 翻格配置自检：五类格子权重均为正整数（发牌按权重抽，
+  // 0/负数会让某类永不出现）；章节名恰 9 个（九境各一章）；每类
+  // 诗句至少 2 句（翻开时轮换）；兜底小事件每类恰 2 桩、id 池内
+  // 唯一且不与地点事件池 / 随机探索模式池 / 年度大事件池撞车
+  // （chooseOption 按 id 查表，撞车会串池）；稀有度权重与事件池
+  // 同一把尺（EVENT_RARITY 按最高选项难度分档）；产出红线与年
+  // 度大事件同口径：成败效果不得带 shard（主线进度）与 age（结
+  // 算中再推进时钟，与「翻格不另耗月份」冲突）；代价与 U-377
+  // 同口径（非空、只许五键、各项为负）。
+  const ge = GRID_EXPLORE;
+  for (const t of GRID_CELL_TYPES) {
+    const w = ge.cellWeights[t];
+    if (!Number.isInteger(w) || w <= 0) throw bad(`grid-explore cellWeights.${t} must be a positive integer (got ${w})`);
+    if (ge.poems[t].length < 2) throw bad(`grid-explore poems.${t} must carry at least 2 lines (got ${ge.poems[t].length})`);
+  }
+  if (ge.chapters.length !== 9) throw bad(`grid-explore chapters must define exactly 9 chapter names (got ${ge.chapters.length})`);
+  const gfIds: string[] = [];
+  for (const t of GRID_CELL_TYPES) {
+    const n = ge.fallbackEvents.filter((e) => e.cellType === t).length;
+    if (n !== 2) throw bad(`grid-explore fallbackEvents must define exactly 2 events for cell type ${t} (got ${n})`);
+  }
+  for (const ev of ge.fallbackEvents) {
+    gfIds.push(ev.id);
+    if (deckIds.has(ev.id)) throw bad(`grid-explore fallback event ${ev.id} collides with a deck event id`);
+    if (RANDOM_EXPLORE_EVENT_BY_ID.has(ev.id)) throw bad(`grid-explore fallback event ${ev.id} collides with a random-explore event id`);
+    if (ANNUAL_EVENT_BY_ID.has(ev.id)) throw bad(`grid-explore fallback event ${ev.id} collides with an annual event id`);
+    const tier = eventRarityTier({ ...ev, locations: [] });
+    if (ev.commonality !== EVENT_RARITY.weights[tier]) throw bad(`grid-explore fallback event ${ev.id} commonality ${ev.commonality} does not match rarity tier ${tier} weight ${EVENT_RARITY.weights[tier]}`);
+    for (const opt of ev.options) {
+      for (const eff of [opt.ok, opt.fail]) {
+        if (eff.shard) throw bad(`grid-explore fallback event ${ev.id} option "${opt.label}" carries shard (grid events pay out ordinary resources only)`);
+        if (eff.age) throw bad(`grid-explore fallback event ${ev.id} option "${opt.label}" carries age (grid flips must not advance the clock)`);
+      }
+      if (opt.cost !== undefined) {
+        const entries = Object.entries(opt.cost).filter(([, v]) => v !== undefined);
+        if (entries.length === 0) throw bad(`grid-explore fallback event ${ev.id} option "${opt.label}" has an empty cost`);
+        for (const [k, v] of entries) {
+          if (typeof v !== "number" || !(v < 0)) throw bad(`grid-explore fallback event ${ev.id} option "${opt.label}" cost.${k} must be negative (got ${v})`);
+        }
+      }
+    }
+  }
+  unique("grid-explore.fallbackEvents", gfIds);
+
+  // U-414：禁地 Boss 表自检——恰 8 位、目标境界 1..8（筑基..渡
+  // 劫）各一不缺不重；tier 须与目标境界一致（难度走 combatDcFor
+  // 的 tier 口径，错位会让 Boss 难度与目标境界脱钩）；might 为
+  // 正整数且随目标境界严格递增（沿 U-401 梯度，高境 Boss 不得
+  // 弱于低境）；id/name 在敌手池与秘境 Boss 里不得撞车（斗法结
+  // 算按敌手名号回认胜负，撞名会串认胜负）；禁地名与出场文案
+  // 非空（客户端入口与日志直接展示）。
+  const bb = BREAKTHROUGH_BOSSES;
+  if (bb.bosses.length !== CLASSIC_REALMS.length - 1) throw bad(`breakthrough-boss must define exactly ${CLASSIC_REALMS.length - 1} bosses (got ${bb.bosses.length})`);
+  unique("breakthrough-boss.ids", bb.bosses.map((b) => b.id));
+  const enemyIds = new Set(ENEMIES.map((e) => e.id));
+  const enemyNames = new Set(ENEMIES.map((e) => e.name));
+  const srBossIds = new Set(SECRET_REALMS.realms.map((r) => r.boss.id));
+  const srBossNames = new Set(SECRET_REALMS.realms.map((r) => r.boss.name));
+  let prevMight = 0;
+  for (let target = 1; target < CLASSIC_REALMS.length; target++) {
+    const b = bb.bosses.find((x) => x.targetRealm === target);
+    if (!b) throw bad(`breakthrough-boss missing boss for targetRealm ${target}`);
+    if (b.tier !== target) throw bad(`breakthrough-boss ${b.id} tier ${b.tier} must equal targetRealm ${target}`);
+    if (!Number.isInteger(b.might) || b.might <= 0) throw bad(`breakthrough-boss ${b.id} might must be a positive integer (got ${b.might})`);
+    if (b.might <= prevMight) throw bad(`breakthrough-boss might must strictly increase with targetRealm (${b.id} has ${b.might}, previous ${prevMight})`);
+    prevMight = b.might;
+    if (enemyIds.has(b.id) || srBossIds.has(b.id)) throw bad(`breakthrough-boss id ${b.id} collides with an enemy / secret-realm boss id`);
+    if (enemyNames.has(b.name) || srBossNames.has(b.name)) throw bad(`breakthrough-boss name ${b.name} collides with an enemy / secret-realm boss name`);
+    if (!b.placeName || !b.intro) throw bad(`breakthrough-boss ${b.id} must carry placeName and intro`);
+  }
+
+  // U-415：雷劫化身表自检——恰 8 位、目标境界 1..8 各一不缺不
+  // 重；tier 须与目标境界一致（难度走 combatDcFor 的 tier 口
+  // 径）；might 为正整数、随目标境界严格递增，且同档必须严格
+  // 低于禁地 Boss（定稿口径：禁地夺丹是门槛、渡劫是仪式战，
+  // 难度定位不同——配反了服务端起不来）；id/name 在敌手池、
+  // 秘境 Boss、禁地 Boss 里都不得撞车（斗法结算按名号回认胜
+  // 负，撞名会串认）；来临叙事非空（仪式卡直接展示）。
+  const tb = TRIBULATIONS;
+  if (tb.avatars.length !== CLASSIC_REALMS.length - 1) throw bad(`tribulation must define exactly ${CLASSIC_REALMS.length - 1} avatars (got ${tb.avatars.length})`);
+  unique("tribulation.ids", tb.avatars.map((a) => a.id));
+  const bbIds = new Set(bb.bosses.map((b) => b.id));
+  const bbNames = new Set(bb.bosses.map((b) => b.name));
+  let prevTribMight = 0;
+  for (let target = 1; target < CLASSIC_REALMS.length; target++) {
+    const a = tb.avatars.find((x) => x.targetRealm === target);
+    if (!a) throw bad(`tribulation missing avatar for targetRealm ${target}`);
+    if (a.tier !== target) throw bad(`tribulation ${a.id} tier ${a.tier} must equal targetRealm ${target}`);
+    if (!Number.isInteger(a.might) || a.might <= 0) throw bad(`tribulation ${a.id} might must be a positive integer (got ${a.might})`);
+    if (a.might <= prevTribMight) throw bad(`tribulation might must strictly increase with targetRealm (${a.id} has ${a.might}, previous ${prevTribMight})`);
+    prevTribMight = a.might;
+    const boss = bb.bosses.find((x) => x.targetRealm === target);
+    if (boss && a.might >= boss.might) throw bad(`tribulation ${a.id} might ${a.might} must be lower than breakthrough boss ${boss.id} might ${boss.might} (ritual fight, not a gate)`);
+    if (enemyIds.has(a.id) || srBossIds.has(a.id) || bbIds.has(a.id)) throw bad(`tribulation id ${a.id} collides with an enemy / secret-realm boss / breakthrough boss id`);
+    if (enemyNames.has(a.name) || srBossNames.has(a.name) || bbNames.has(a.name)) throw bad(`tribulation name ${a.name} collides with an enemy / secret-realm boss / breakthrough boss name`);
+    if (!a.intro) throw bad(`tribulation ${a.id} must carry intro`);
+  }
+
+  // U-416：共鸣 / 失衡表自检——阈值口径（共鸣阈值 > 1 且 < 失衡
+  // 阈值，两态不重叠、中间留平稳带）；概率与月数取值域（概率为
+  // 0–100 的整数百分点、紊乱持续月数为正整数、修炼加成 / 惩罚
+  // 为正整数百分点）；共鸣奇遇恰 3 桩、暴走事件恰 2 个选项
+  // （强压 / 顺导二选一）；全部事件 id 池内唯一且不与地点事件
+  // 池 / 随机探索模式池 / 年度大事件池 / 翻格兜底池撞车
+  // （chooseOption 按 id 查表，撞车会串池）；稀有度权重与事件
+  // 池同一把尺；产出红线与年度大事件同口径：成败效果不得带
+  // shard（主线进度）与 age（结算中再推进时钟）；代价与 U-377
+  // 同口径（非空、只许五键、各项为负）。
+  const rs = RESONANCE;
+  if (!(rs.resonanceMaxRatio > 1)) throw bad(`resonance resonanceMaxRatio must be > 1 (got ${rs.resonanceMaxRatio})`);
+  if (!(rs.imbalanceMinRatio > rs.resonanceMaxRatio)) throw bad(`resonance imbalanceMinRatio ${rs.imbalanceMinRatio} must exceed resonanceMaxRatio ${rs.resonanceMaxRatio} (a balanced band must remain)`);
+  for (const [k, v] of [["resonanceEncounterChancePct", rs.resonanceEncounterChancePct], ["rampageChancePct", rs.rampageChancePct]] as const) {
+    if (!Number.isInteger(v) || v < 0 || v > 100) throw bad(`resonance ${k} must be an integer in [0, 100] (got ${v})`);
+  }
+  if (!Number.isInteger(rs.disorderMonths) || rs.disorderMonths <= 0) throw bad(`resonance disorderMonths must be a positive integer (got ${rs.disorderMonths})`);
+  for (const [k, v] of [["resonanceCultivateBonusPct", rs.resonanceCultivateBonusPct], ["disorderCultivatePenaltyPct", rs.disorderCultivatePenaltyPct]] as const) {
+    if (!Number.isInteger(v) || v <= 0 || v >= 100) throw bad(`resonance ${k} must be an integer in (0, 100) (got ${v})`);
+  }
+  if (rs.encounters.length !== 3) throw bad(`resonance encounters must define exactly 3 events (got ${rs.encounters.length})`);
+  if (rs.rampageEvent.options.length !== 2) throw bad(`resonance rampageEvent must define exactly 2 options (got ${rs.rampageEvent.options.length})`);
+  const rsIds: string[] = [];
+  for (const ev of [...rs.encounters, rs.rampageEvent]) {
+    rsIds.push(ev.id);
+    if (deckIds.has(ev.id)) throw bad(`resonance event ${ev.id} collides with a deck event id`);
+    if (RANDOM_EXPLORE_EVENT_BY_ID.has(ev.id)) throw bad(`resonance event ${ev.id} collides with a random-explore event id`);
+    if (ANNUAL_EVENT_BY_ID.has(ev.id)) throw bad(`resonance event ${ev.id} collides with an annual event id`);
+    if (GRID_FALLBACK_BY_ID.has(ev.id)) throw bad(`resonance event ${ev.id} collides with a grid fallback event id`);
+    const tier = eventRarityTier({ ...ev, locations: [] });
+    if (ev.commonality !== EVENT_RARITY.weights[tier]) throw bad(`resonance event ${ev.id} commonality ${ev.commonality} does not match rarity tier ${tier} weight ${EVENT_RARITY.weights[tier]}`);
+    for (const opt of ev.options) {
+      for (const eff of [opt.ok, opt.fail]) {
+        if (eff.shard) throw bad(`resonance event ${ev.id} option "${opt.label}" carries shard (resonance events pay out ordinary resources only)`);
+        if (eff.age) throw bad(`resonance event ${ev.id} option "${opt.label}" carries age (resonance events must not advance the clock)`);
+      }
+      if (opt.cost !== undefined) {
+        const entries = Object.entries(opt.cost).filter(([, v]) => v !== undefined);
+        if (entries.length === 0) throw bad(`resonance event ${ev.id} option "${opt.label}" has an empty cost`);
+        for (const [k, v] of entries) {
+          if (typeof v !== "number" || !(v < 0)) throw bad(`resonance event ${ev.id} option "${opt.label}" cost.${k} must be negative (got ${v})`);
+        }
+      }
+    }
+  }
+  unique("resonance.events", rsIds);
 }
 
 assertContentIntegrity();

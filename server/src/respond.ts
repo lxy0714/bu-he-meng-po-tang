@@ -3,13 +3,13 @@
 
 import { z } from "./platform";
 import {
-ARTIFACTS, CLASSIC_REALMS, COMMISSIONS, CRAFT_KINDS, CRAFT_SKILLS, CURRENT_EVENT_VERSION, DAILY_COMMISSIONS, DESTINIES, ENEMIES, EVENT_PACKS, EVENT_RELEASES, FORGE, LOCATION_DROPS, LOCATIONS, MAINLINE_CHAPTERS, MAINLINE_TOTAL_SHARDS, NAME_POOL, NO_ROOT_ID, ORIGIN_POOL, REINCARNATION_POINTS, SEALED_EGGS, SECRET_REALMS, SECT_RANKS, SHOP, SIGN_INS, STAGES, TALENTS, TECHNIQUES, TECHNIQUE_MASTERY, TIME_COSTS, TREASURES, TIMED_EVENTS,
-artifactById, caveUpgradeCost, combatDc, commissionById, commissionGrantFor, craftLevelDefFor, craftNextLevelDef, craftProficiencyFor, craftYieldPctFor, dailyCommissionById, destinyById, dropTierDef, eventPackOf, eventReleaseVersion, exploreDensityWord, forgeCandidatesFor, imprintValuesFor, locById, npcById, sectGrantForRank, sectRankById, shopPrice, talentById, techById, techGradeRank, techLayerBreakdown, techTotalPoints, timeCostMonths, timedEventById, travelMonthsTo, treasureById,
+ACTION_POINTS, ARTIFACTS, CLASSIC_REALMS, COMMISSIONS, CRAFT_KINDS, CRAFT_SKILLS, CURRENT_EVENT_VERSION, DAILY_COMMISSIONS, DESTINIES, ENEMIES, EVENT_PACKS, EVENT_RELEASES, FORGE, LOCATION_DROPS, LOCATIONS, MAINLINE_CHAPTERS, MAINLINE_TOTAL_SHARDS, NAME_POOL, NO_ROOT_ID, ORIGIN_POOL, QUESTS, REINCARNATION_POINTS, ROUND_GOALS, SEALED_EGGS, SECRET_REALMS, SECT_RANKS, SHOP, SIGN_INS, STAGES, TALENTS, TECHNIQUES, TECHNIQUE_MASTERY, TIME_COSTS, TREASURES, TIMED_EVENTS,
+GRID_CELL_LABELS, RESONANCE, artifactById, breakthroughBossFor, caveUpgradeCost, combatDc, commissionById, commissionGrantFor, craftLevelDefFor, craftNextLevelDef, craftProficiencyFor, craftYieldPctFor, dailyCommissionById, destinyById, dropTierDef, eventPackOf, eventReleaseVersion, exploreDensityWord, forgeCandidatesFor, gridChapterFor, imprintValuesFor, locById, npcById, questById, roundGoalById, sectGrantForRank, sectRankById, shopPrice, talentById, techById, techGradeRank, techLayerBreakdown, techTotalPoints, timeCostMonths, timedEventById, travelMonthsTo, treasureById, tribulationFor,
 type TechDef,
 type TimeCostKey,
 } from "./data";
 import { EVENTS, formatEffectGains, type Effect } from "./events";
-import { codexImprintOf, commissionObjectiveText, dailyBatchIsCurrent, dailyObjectiveText, decayMult, forgeGateFor, imprintLabelFor, locUnlocked, oreCountFor, realmsFor, signInRevisitText, signInRewardText, techEffectiveBonusPctOf, techProgressOf, threshold, timedDaysText, timedNowDay, timedObjectiveText, timedRepText, weekKeyOf, type Character, type GameState, type Settings } from "./state";
+import { breakthroughBossEnemy, breakthroughPillBlockReason, codexImprintOf, commissionObjectiveText, dailyBatchIsCurrent, dailyObjectiveText, decayMult, forgeGateFor, imprintLabelFor, isMajorBreakthroughNext, locUnlocked, oreCountFor, questAvailable, questObjectiveText, questRewardText, questStageDepth, questStageTotal, realmsFor, resonanceDisorderMonthsLeft, resonanceStateOf, roundGoalObjectiveText, signInRevisitText, signInRewardText, techEffectiveBonusPctOf, techProgressOf, threshold, timedDaysText, timedNowDay, timedObjectiveText, timedRepText, tribulationEnemy, weekKeyOf, type Character, type GameState, type Settings } from "./state";
 
 // ---------- zod shapes ----------
 
@@ -49,6 +49,18 @@ const pendingEventShape = z.object({
   // U-390 日常委托触发标记：仅日常委托触发的待决事件带此字段，
   // 客户端据此标注「今日委托」；普通待决事件与旧存档皆缺省。
   daily: z.object({ dailyId: z.string(), locationId: z.string() }).optional(),
+  // U-410 年度事件标记：仅年度事件推演触发的待决事件带此字段
+  //（year 所属年份序号、grand 是否年度大事件），客户端据此标注
+  //「第 N 年 · 年度事件 / 年度大事件」；普通待决事件与旧存档皆缺省。
+  annual: z.object({ year: z.number(), grand: z.boolean() }).optional(),
+  // U-412 翻格标记：仅翻格触发的待决事件带此字段（cellType 为翻
+  // 开的格子类型 id），客户端据此标注「翻格际遇 · X 格」；普通
+  // 待决事件与旧存档皆缺省。
+  grid: z.object({ cellType: z.string() }).optional(),
+  // U-416 共鸣 / 暴走标记：仅共鸣奇遇与灵力暴走的待决事件带此
+  // 字段（kind 为 encounter / rampage），客户端据此标注；普通
+  // 待决事件与旧存档皆缺省。
+  resonance: z.object({ kind: z.string() }).optional(),
   // U-378 见好就收进行状态：仅抉择待决事件（id 为 loop:<事件id>）
   // 带此字段，客户端据此可标注圈数；普通待决事件与旧存档皆缺省。
   loop: z.object({
@@ -111,7 +123,30 @@ const characterShape = z.object({
   age: z.number(), lifespan: z.number(), locationId: z.string(),
   // U-608 细时钟：本世累计月份（年龄由它推导，客户端据此显示「年+月」）。
   totalMonths: z.number(),
+  // U-409 年度行动点：服务端按配置表 action-points.json 整形——
+  // remaining 当前年份余量、cap 年度上限、year 当前年份序号
+  //（自降生起算）、costs 九类动作耗点（客户端据此在按钮上标注
+  // 耗点并在点数不足时置灰明示）。只读展示：扣点与刷新在服务
+  // 端按同一份配置执行。
+  actionPoints: z.object({
+    remaining: z.number(), cap: z.number(), year: z.number(),
+    costs: z.object({
+      cultivate: z.number(), breakthrough: z.number(), explore: z.number(), fight: z.number(),
+      craft: z.number(), sectChore: z.number(), social: z.number(), travel: z.number(), rest: z.number(),
+    }),
+  }),
   might: z.number(), sense: z.number(), fortune: z.number(), body: z.number(),
+  // U-416 属性共鸣 / 失衡：服务端按配置表 resonance.json 实时整
+  // 形——state 为当前配比状态（resonance 四象共鸣 / balanced 平
+  // 稳 / imbalance 灵力失衡）、ratio 为四维最高 / 最低比值（保留
+  // 两位小数）、disorderMonthsLeft 为灵力紊乱 debuff 剩余月数
+  //（0 = 无紊乱）、cultivateBonusPct / disorderPenaltyPct 为配
+  // 置里的修炼加成 / 紊乱惩罚百分点（客户端文案与服务端结算同
+  // 一份配置）。只读展示：状态判定与结算在服务端按同一配置执行。
+  resonance: z.object({
+    state: z.string(), ratio: z.number(), disorderMonthsLeft: z.number(),
+    cultivateBonusPct: z.number(), disorderPenaltyPct: z.number(),
+  }),
   sealedMemory: z.boolean(), memoryTier: z.number(), dead: z.boolean(), deathCause: z.string().nullable(),
   pendingEvent: pendingEventShape.nullable(), lastRoll: lastRollShape.nullable(),
   // U-381 分叉路线：进行状态（当前层/总层数/本层三节点）；战斗与精英
@@ -123,6 +158,19 @@ const characterShape = z.object({
       type: z.string(),
       enemyId: z.string().optional(), enemyName: z.string().optional(),
       enemyTierName: z.string().optional(), enemyDc: z.number().optional(),
+    })),
+  }).nullable(),
+  // U-412 翻格棋盘：进行中棋盘的整形——chapter 为当前境界的诗意
+  // 章节名（配置表 grid-explore.json 按境界取），cells 恒 9 格：
+  // 已翻格带类型 id / 类型名 / 翻开诗句，覆面格 type/typeName/
+  // poem 恒为 null/空串（类型发牌时已定死在存档里，翻开前不下
+  // 发、防窥牌）；flippedCount 为已翻数（9 = 本局翻完）。无进
+  // 行中棋盘与旧存档皆为 null。
+  gridBoard: z.object({
+    chapter: z.string(),
+    flippedCount: z.number(), totalCells: z.number(),
+    cells: z.array(z.object({
+      flipped: z.boolean(), type: z.string().nullable(), typeName: z.string(), poem: z.string(),
     })),
   }).nullable(),
   talentIds: z.array(z.string()), talentNames: z.array(z.string()), techniqueId: z.string().nullable(), techniqueName: z.string(),
@@ -252,6 +300,45 @@ const commissionActiveShape = z.object({
   locationId: z.string(), locationName: z.string(), atTarget: z.boolean(), objectiveText: z.string(),
   progress: z.number(), need: z.number(), done: z.boolean(), rewardText: z.string(),
 });
+// U-407 连环任务：可接条目（首阶段目标与全链奖励明示、阶段数按
+// 任务图深度计）、进行中条目（当前阶段标题/文案/目标/进度、停在
+// 分支点时带 branch 抉择：选项含业力与即时奖励文案及走向的下一
+// 阶段名）、本世已完成条目。定义与文案全部由服务端按配置表整
+// 形，客户端只展示与发动作（接取/抉择/结算/放弃）。
+const questOfferShape = z.object({
+  id: z.string(), title: z.string(), brief: z.string(),
+  issuerName: z.string(), issuerTitle: z.string(),
+  boardLocationId: z.string(), boardLocationName: z.string(), atBoard: z.boolean(),
+  stageTotal: z.number(), firstStageTitle: z.string(), firstObjectiveText: z.string(),
+  finalRewardText: z.string(),
+});
+const questBranchShape = z.object({
+  prompt: z.string(),
+  options: z.array(z.object({
+    id: z.string(), label: z.string(), desc: z.string(),
+    karmaText: z.string(), rewardText: z.string(), nextStageTitle: z.string(),
+  })),
+});
+const questActiveShape = z.object({
+  id: z.string(), title: z.string(),
+  issuerName: z.string(), issuerTitle: z.string(),
+  boardLocationId: z.string(), boardLocationName: z.string(), atBoard: z.boolean(),
+  stageId: z.string(), stageTitle: z.string(), stageText: z.string(),
+  stageNumber: z.number(), stageTotal: z.number(),
+  objectiveText: z.string(), atTarget: z.boolean(),
+  progress: z.number(), need: z.number(), done: z.boolean(),
+  stageRewardText: z.string(), finalRewardText: z.string(),
+  awaitingBranch: z.boolean(), branch: questBranchShape.nullable(), branchChoice: z.string(),
+});
+// U-408 单轮目标：候选条目与当前目标条目共用一个形状（标题/念想
+// 文案/目标文案/奖励文案）；当前目标另带 progress/need 进度。定
+// 义与文案全部由服务端按配置表整形，客户端只展示与发动作（选
+// 定/放弃）。无当前目标时 current 为 null、candidates 为本轮候
+// 选；有当前目标时 candidates 为空。
+const roundGoalItemShape = z.object({
+  id: z.string(), title: z.string(), text: z.string(),
+  objectiveText: z.string(), rewardText: z.string(),
+});
 // U-389 限时帖：板上挂帖（带挂帖倒计时 daysLeft = 还能挂几天、
 // leftText 为天/月文案、接取时限 limitDays/limitText 与声望四段文
 // 案 repText，接帖前代价全明示）与已接限时帖（带截止倒计时
@@ -365,6 +452,21 @@ export const stateResponse = z.object({
     maxActive: z.number(), completedCount: z.number(),
     offered: z.array(commissionOfferShape),
     active: z.array(commissionActiveShape),
+  }),
+  // U-407 连环任务：同时进行中上限、本世已完成数、可接条目、进行
+  // 中条目（带当前阶段与分支抉择）、本世已完成条目。
+  quests: z.object({
+    maxActive: z.number(), completedCount: z.number(),
+    offered: z.array(questOfferShape),
+    active: z.array(questActiveShape),
+    completed: z.array(z.object({ id: z.string(), title: z.string() })),
+  }),
+  // U-408 单轮目标：每轮候选数、本世已完成数、当前目标（带进度，
+  // 未选时为 null）、本轮候选（有当前目标时为空）。
+  roundGoal: z.object({
+    candidateCount: z.number(), completedCount: z.number(),
+    current: roundGoalItemShape.extend({ progress: z.number(), need: z.number() }).nullable(),
+    candidates: z.array(roundGoalItemShape),
   }),
   // U-389 限时帖：同时可接数、本世办妥/失败/过期数、板上挂帖与已接限时帖（均带倒计时）。
   timedEvents: z.object({
@@ -499,6 +601,29 @@ export const stateResponse = z.object({
       bossName: z.string(), bossIntro: z.string(), bossReady: z.boolean(), bossDefeated: z.boolean(),
     })),
   }),
+  // U-414 禁地夺丹：当前角色的夺丹面板整形——majorNext 为下一步
+  // 是否大境界突破（决定入口可用与持丹门槛）；applicable 时给出
+  // 对应禁地 Boss（目标境界名/禁地名/名号/出场文案/斗法难度）；
+  // pillBlockReason 为持丹门槛的拦截文案（与服务端拦截日志同一
+  // 口径，客户端据此在突破按钮与夺丹入口处明示）；无角色时全
+  // 为缺省。只读展示：门槛与结算在服务端按同一份配置执行。
+  breakthroughBoss: z.object({
+    majorNext: z.boolean(), pillCount: z.number(),
+    targetRealmName: z.string(), placeName: z.string(),
+    bossName: z.string(), bossIntro: z.string(), bossDc: z.number(),
+    pillBlockReason: z.string(),
+  }),
+  // U-415 渡劫仪式：当前角色的渡劫整形——active 为是否正处渡劫
+  // 三段之中；phase 为当前段（arrival 雷劫来临 / battle 渡劫战
+  // / settle 劫后结算）；化身按存档里的目标境界现查配置表（名
+  // 号/来临叙事/斗法难度与服务端结算同一口径）；won 只在
+  // settle 段有意义（战已打完、待领受劫果）；无角色/未渡劫时
+  // 为缺省。只读展示：推进与结算在服务端（tribulation 动作）。
+  tribulation: z.object({
+    active: z.boolean(), phase: z.string(), targetRealmName: z.string(),
+    avatarName: z.string(), avatarIntro: z.string(), avatarDc: z.number(),
+    won: z.boolean(),
+  }),
 });
 type StateResponse = z.infer<typeof stateResponse>;
 type CharacterResponse = z.infer<typeof characterShape>;
@@ -536,6 +661,27 @@ function toCharacter(c: Character, settings: Settings): CharacterResponse {
   const artifactDef = artifactById(c.artifactId);
   return {
     ...c,
+    // U-409：行动点整形（覆盖 ...c 里的原始 actionPoints 数字字
+    // 段）——余量钳到 [0, cap] 展示（存档值由结算维护，此处只防
+    // 御异常值），年份与耗点表全部现读存档/配置，与服务端扣点
+    // 口径同一份数据。
+    actionPoints: {
+      remaining: Math.max(0, Math.min(ACTION_POINTS.annualCap, Math.floor(c.actionPoints ?? ACTION_POINTS.annualCap))),
+      cap: ACTION_POINTS.annualCap,
+      year: c.actionYear ?? 1,
+      costs: ACTION_POINTS.costs,
+    },
+    // U-416：共鸣 / 失衡状态整形——状态与比值由 state.ts 的
+    // resonanceStateOf 按当前四维实时计算（不读存档状态字段），
+    // 紊乱剩余月数按到期月份与累计月份现算；加成 / 惩罚百分点
+    // 直读配置表，与服务端结算同一份数据。
+    resonance: {
+      state: resonanceStateOf(c).kind,
+      ratio: Math.round(resonanceStateOf(c).ratio * 100) / 100,
+      disorderMonthsLeft: resonanceDisorderMonthsLeft(c),
+      cultivateBonusPct: RESONANCE.resonanceCultivateBonusPct,
+      disorderPenaltyPct: RESONANCE.disorderCultivatePenaltyPct,
+    },
     artifactSealed: !!artifactDef && !c.artifactBonusApplied,
     artifactMinRealm: artifactDef?.minRealm ?? 0,
     artifactMinRealmName: artifactDef ? (realmsFor(settings)[artifactDef.minRealm]?.name ?? CLASSIC_REALMS[artifactDef.minRealm]?.name ?? "") : "",
@@ -549,6 +695,16 @@ function toCharacter(c: Character, settings: Settings): CharacterResponse {
           ? { type: n.type, enemyId: e.id, enemyName: e.name, enemyTierName: realmsFor(settings)[e.tier]?.name ?? "", enemyDc: combatDc(e) }
           : { type: n.type };
       }),
+    } : null,
+    // U-412：翻格棋盘整形——覆面格的类型与诗句不下发（翻开前窥
+    // 不得），已翻格全量给出；章节名按当前境界现取配置表。
+    gridBoard: c.gridBoard ? {
+      chapter: gridChapterFor(c.realmIdx),
+      flippedCount: c.gridBoard.cells.filter((x) => x.flipped).length,
+      totalCells: c.gridBoard.cells.length,
+      cells: c.gridBoard.cells.map((x) => x.flipped
+        ? { flipped: true, type: x.type, typeName: GRID_CELL_LABELS[x.type] ?? x.type, poem: x.poem }
+        : { flipped: false, type: null, typeName: "", poem: "" }),
     } : null,
     talentNames: c.talentIds.map((id) => talentById(id)?.name ?? id),
     techniqueName: techById(c.techniqueId)?.name ?? "",
@@ -787,6 +943,92 @@ export function toResponse(state: GameState): StateResponse {
           progress: a.progress, need: d.objective.need, done: a.done,
           rewardText: commissionRewardText(d.id, d.reward),
         }];
+      }),
+    },
+    // U-407 连环任务整形：可接列表由定义 + 本世状态派生（quest-
+    // Available，与接取动作同一口径）；进行中条目把当前阶段的标
+    // 题/文案/目标/进度与分支抉择一并整形（分支选项带业力与即时
+    // 奖励文案、走向的下一阶段名）。无角色（创建页）时为空。
+    quests: {
+      maxActive: QUESTS.maxActive,
+      completedCount: c?.quests?.completedCount ?? 0,
+      offered: (c && c.quests ? QUESTS.quests.filter((d) => questAvailable(c, d)) : []).map((d) => {
+        const issuer = npcById(d.issuerNpc);
+        const first = d.stages[0];
+        return {
+          id: d.id, title: d.title, brief: d.brief,
+          issuerName: issuer?.name ?? "", issuerTitle: issuer?.title ?? "",
+          boardLocationId: d.boardLocationId,
+          boardLocationName: locById(d.boardLocationId)?.name ?? d.boardLocationId,
+          atBoard: !!c && c.locationId === d.boardLocationId,
+          stageTotal: questStageTotal(d),
+          firstStageTitle: first?.title ?? "",
+          firstObjectiveText: first ? questObjectiveText(first) : "",
+          finalRewardText: questRewardText(d.finalReward),
+        };
+      }),
+      active: (c?.quests?.active ?? []).flatMap((a) => {
+        const d = questById(a.id);
+        if (!d || !c) return [];
+        const issuer = npcById(d.issuerNpc);
+        const stage = d.stages.find((s) => s.id === a.stageId);
+        if (!stage) return [];
+        const branch = a.awaitingBranch && stage.branch ? {
+          prompt: stage.branch.prompt,
+          options: stage.branch.options.map((op) => ({
+            id: op.id, label: op.label, desc: op.desc,
+            karmaText: op.karma ? `业力 ${op.karma > 0 ? "+" : ""}${op.karma}` : "",
+            rewardText: op.reward ? questRewardText(op.reward) : "",
+            nextStageTitle: d.stages.find((s) => s.id === op.next)?.title ?? "",
+          })),
+        } : null;
+        return [{
+          id: d.id, title: d.title,
+          issuerName: issuer?.name ?? "", issuerTitle: issuer?.title ?? "",
+          boardLocationId: d.boardLocationId,
+          boardLocationName: locById(d.boardLocationId)?.name ?? d.boardLocationId,
+          atBoard: c.locationId === d.boardLocationId,
+          stageId: stage.id, stageTitle: stage.title, stageText: stage.text,
+          stageNumber: questStageDepth(d, stage.id), stageTotal: questStageTotal(d),
+          objectiveText: questObjectiveText(stage),
+          atTarget: !!stage.objective.locationId && c.locationId === stage.objective.locationId,
+          progress: a.progress, need: stage.objective.need, done: a.done,
+          stageRewardText: stage.reward ? questRewardText(stage.reward) : "",
+          finalRewardText: questRewardText(d.finalReward),
+          awaitingBranch: a.awaitingBranch, branch, branchChoice: a.branchChoice,
+        }];
+      }),
+      completed: (c?.quests?.completedIds ?? []).flatMap((id) => {
+        const d = questById(id);
+        return d ? [{ id: d.id, title: d.title }] : [];
+      }),
+    },
+    // U-408 单轮目标整形：当前目标由存档 currentId 查定义整形（带
+    // 进度 progress/need）；候选只在无当前目标时下发（存档 candida-
+    // tes 已由 loadState 补齐，这里只做定义整形与失效过滤）。无角
+    // 色（创建页）时 current 为 null、candidates 为空。
+    roundGoal: {
+      candidateCount: ROUND_GOALS.candidateCount,
+      completedCount: c?.roundGoal?.completedCount ?? 0,
+      current: (() => {
+        const g = c?.roundGoal;
+        if (!g || !g.currentId) return null;
+        const d = roundGoalById(g.currentId);
+        if (!d) return null;
+        return {
+          id: d.id, title: d.title, text: d.text,
+          objectiveText: roundGoalObjectiveText(d),
+          rewardText: questRewardText(d.reward),
+          progress: g.progress, need: d.objective.need,
+        };
+      })(),
+      candidates: (c?.roundGoal && !c.roundGoal.currentId ? c.roundGoal.candidates : []).flatMap((id) => {
+        const d = roundGoalById(id);
+        return d ? [{
+          id: d.id, title: d.title, text: d.text,
+          objectiveText: roundGoalObjectiveText(d),
+          rewardText: questRewardText(d.reward),
+        }] : [];
       }),
     },
     // U-389 限时帖整形：id → 发布人/地点名/目标文案/奖励文案/声望
@@ -1057,6 +1299,42 @@ export function toResponse(state: GameState): StateResponse {
         };
       }),
     },
+    // U-414 禁地夺丹整形：Boss 按角色当前境界现查配置表（目标境
+    // 界 = 当前境界 +1），难度走 combatDc 与服务端结算同一口径；
+    // 门槛文案与服务端 breakthroughPillBlockReason 同一函数。
+    breakthroughBoss: (() => {
+      const empty = { majorNext: false, pillCount: 0, targetRealmName: "", placeName: "", bossName: "", bossIntro: "", bossDc: 0, pillBlockReason: "" };
+      if (!c || c.dead) return empty;
+      const majorNext = isMajorBreakthroughNext(c, state.settings);
+      const def = majorNext ? breakthroughBossFor(c.realmIdx + 1) : undefined;
+      return {
+        majorNext,
+        pillCount: c.pills.brk,
+        targetRealmName: def ? (realmsFor(state.settings)[def.targetRealm]?.name ?? "") : "",
+        placeName: def?.placeName ?? "",
+        bossName: def?.name ?? "",
+        bossIntro: def?.intro ?? "",
+        bossDc: def ? combatDc(breakthroughBossEnemy(def)) : 0,
+        pillBlockReason: breakthroughPillBlockReason(state) ?? "",
+      };
+    })(),
+    // U-415 渡劫仪式整形：化身按存档目标境界现查配置表，难度走
+    // combatDc 与服务端渡劫战结算同一口径。
+    tribulation: (() => {
+      const empty = { active: false, phase: "", targetRealmName: "", avatarName: "", avatarIntro: "", avatarDc: 0, won: false };
+      if (!c || c.dead || !c.tribulation) return empty;
+      const trib = c.tribulation;
+      const def = tribulationFor(trib.targetRealmIdx);
+      return {
+        active: true,
+        phase: trib.phase,
+        targetRealmName: realmsFor(state.settings)[trib.targetRealmIdx]?.name ?? "",
+        avatarName: def?.name ?? "",
+        avatarIntro: def?.intro ?? "",
+        avatarDc: def ? combatDc(tribulationEnemy(def)) : 0,
+        won: trib.won,
+      };
+    })(),
   };
 }
 

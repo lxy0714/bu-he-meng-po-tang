@@ -1,15 +1,24 @@
 # 路线图 · Roadmap
 
-本页是《不喝孟婆汤》的公开路线图，条目均来自已定稿的 625 项开发计划（当前进度 50/625）。顺序为大致排期，具体以实际交付为准。
+本页是《不喝孟婆汤》的公开路线图，条目均来自已定稿的 627 项开发计划（当前进度 69/627）。顺序为大致排期，具体以实际交付为准。
 
-This is the public roadmap for *No Mengpo Soup*. Every item comes from the settled 625-item development plan (current progress: 50/625). Ordering is indicative; actual delivery prevails.
+This is the public roadmap for *No Mengpo Soup*. Every item comes from the settled 627-item development plan (current progress: 69/627). Ordering is indicative; actual delivery prevails.
+
+## 已完成 · Done
+
+- **功法系统（Q38）与品阶层数**：功法熟练度 / 层数制（满层进精通档）、功法页面、知识图鉴、轮回结算自选一门图鉴曾精通功法免费带走、功法凡 / 黄 / 玄 / 地 / 天五阶品阶（U-086、U-612–U-614、U-626）。
+  **Technique system (Q38) & tiers**: technique proficiency as layers (a full stack graduates to mastery), a technique page, a knowledge codex, one codex-mastered technique carried free at settlement, and five technique tiers （凡 / 黄 / 玄 / 地 / 天） (U-086, U-612–U-614, U-626).
+- **无灵根开局（U-627）**：灵根池新增无灵根——只能修体修功法、修炼改炼体，引气类功法全途径拦截。
+  **The rootless start (U-627)**: a new "no spirit root" birth root — body techniques only, cultivation becomes body tempering, qi-gathering techniques barred on every path.
+- **探索与秘境**：探索事件分布密度（U-399）、境界与区域解锁挂钩落定（U-400）、三界秘境三处新地点与固定掉落槽 + 隐藏 Boss（U-401）。
+  **Exploration & secret realms**: exploration-event distribution density (U-399), realm-gated region unlocks settled (U-400), and three new secret-realm locations with fixed caches and hidden bosses (U-401).
+- **事件系统十项（v1.2.0）**：随机探索三模式（U-402）、探索分类（U-403）、多阶段连环任务（U-407）、单轮目标（U-408）、年度行动点（U-409）、年度事件（U-410）、翻格遇事件（U-412）、破境丹与禁地夺丹（U-414）、渡劫仪式（U-415）、属性共鸣 / 失衡（U-416）。
+  **Ten event-system items (v1.2.0)**: three random-exploration modes (U-402), exploration categories (U-403), multi-stage quest chains (U-407), round goals (U-408), yearly action points (U-409), annual events (U-410), flip-grid exploration (U-412), breakthrough pills & forbidden-ground duels (U-414), the tribulation rite (U-415), and attribute resonance / imbalance (U-416).
 
 ## 近期 · Near term
 
-- **功法系统（Q38）**：功法熟练度层（使用与练习增长、满级进精通档）、功法页面（流派搭配 / 等级成长 / 练习入口）、轮回结算自选一门已精通功法免费带走（U-612–U-614）。
-  **Technique system (Q38)**: a proficiency layer for techniques (grows by use and practice, graduating to a mastery tier), a technique page (build synergies / growth / practice entry), and one mastered technique carried free at settlement (U-612–U-614).
-- **计划内事件与系统条目**：探索事件分布密度、境界与区域解锁挂钩等既定条目继续逐项推进。
-  **Planned event & system items**: exploration-event distribution density, realm-gated region unlocks, and the remaining settled items, delivered one by one.
+- **计划内事件与系统条目**：流派构筑、血脉投胎、散功重修、主动轮回等既定条目继续逐项推进。
+  **Planned event & system items**: school builds, bloodline rebirth, cultivation-reset re-cultivation, voluntary reincarnation, and the remaining settled items, delivered one by one.
 
 ## 中期 · Mid term
 

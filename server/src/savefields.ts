@@ -21,7 +21,7 @@
 // 完整与迁移正确。
 
 import { ERROR_LOG_SLOT, GAME_SLOT } from "./storage";
-import { SECRET_REALMS, defaultHiddenSlots } from "./content";
+import { ACTION_POINTS, SECRET_REALMS, actionYearFor, defaultHiddenSlots } from "./content";
 
 export type SaveFieldKind = "string" | "number" | "boolean" | "object" | "array" | "record";
 
@@ -193,7 +193,11 @@ export const SAVE_FIELD_REGISTRY: readonly SaveFieldEntry[] = [
   F(G, "character.eventDeck", "array", { make: () => [], note: "U-576 本世事件牌堆（剩余事件 id，堆顶 = index 0）；仅服务端持久化，不进响应形状" }),
   F(G, "character.deckVersion", "number", { make: () => 1, note: "U-395 本世牌堆的事件投放版本（降生时落定为当时最新投放版本，建堆/抽牌只收投放版本不高于此值的事件）；旧存档缺失补 1（首发批——其当世牌堆本就是在只有首发事件时建的，当世不受后来新批次影响，轮回开新世时推进到最新版本）；仅服务端持久化，不进响应形状（响应侧由 eventReleases.lifeVersion 下发）" }),
   F(G, "character.route", "object", { nullable: true, make: () => null, children: ["layer", "totalLayers", "nodes"], note: "U-381 分叉路线进行状态（RouteState）：当前层 / 总层数 / 本层三节点；节点是固定小形状（type + 可选 enemyId）不再下钻；旧存档缺失补 null（无进行中路线）" }),
+  F(G, "character.gridBoard", "object", { nullable: true, make: () => null, children: ["cells"], note: "U-412 翻格棋盘进行状态（GridBoardState）：cells 恒 9 格、元素为固定小形状 {type 格子类型, flipped 是否已翻, poem 翻开诗句}，children 登记后不再下钻；旧存档缺失补 null（无进行中棋盘——开局成本未付，不凭空发棋盘），轮回不带走（降生构造点给 null）" }),
+  F(G, "character.tribulation", "object", { nullable: true, make: () => null, children: ["phase", "targetRealmIdx", "spentCultivation", "breakFailsBefore", "won"], note: "U-415 渡劫仪式进行状态（TribulationState）：phase 三段（arrival 雷劫来临 / battle 渡劫战 / settle 劫后结算）、targetRealmIdx 目标境界序号、spentCultivation 本次判定已扣修为（败时退回）、breakFailsBefore 保底计数快照（败时恢复）、won 战果（settle 段有效），children 登记后不再下钻；旧存档缺失补 null（无进行中渡劫——判定未过不凭空发劫），轮回不带走（降生构造点给 null）" }),
   F(G, "character.commissions", "object", { make: () => ({ board: [], active: [], completedCount: 0 }), children: ["board", "active", "completedCount"], note: "U-388 委托板状态（本世）：板上张贴的委托 id 列表 / 已接委托（元素为固定小形状 {id, progress, done}，children 登记后不再下钻）/ 本世已完成数；旧存档缺失补空状态，板面由 loadState 的 ensureCommissionBoard 补齐" }),
+  F(G, "character.quests", "object", { make: () => ({ active: [], completedIds: [], completedCount: 0 }), children: ["active", "completedIds", "completedCount"], note: "U-407 连环任务状态（本世）：进行中任务（元素为固定小形状 {id, stageId, progress, branchChoice, awaitingBranch, done}，children 登记后不再下钻）/ 本世已完成任务 id / 本世已完成数；任务定义在配置表 quests.json、进度推进在 state.ts 的 bumpQuests；旧存档缺失补空状态，轮回不带走（降生构造点给空状态）" }),
+  F(G, "character.roundGoal", "object", { make: () => ({ currentId: "", progress: 0, candidates: [], completedCount: 0 }), children: ["currentId", "progress", "candidates", "completedCount"], note: "U-408 单轮目标状态（本世）：当前目标 id（未选为空串）/ 当前进度 / 候选目标 id 列表 / 本世已完成数；目标定义在配置表 round-goals.json、候选由 loadState 的 ensureRoundGoalCandidates 补齐、进度推进在 state.ts 的 bumpRoundGoal；旧存档缺失补空状态，轮回不带走（降生构造点给空状态）" }),
   F(G, "character.timedEvents", "object", { make: () => ({ board: [], active: [], completedCount: 0, failedCount: 0, lapsedCount: 0, lapsedIds: [] }), children: ["board", "active", "completedCount", "failedCount", "lapsedCount", "lapsedIds"], note: "U-389 限时帖状态（本世）：板上挂帖（元素为固定小形状 {id, postedDay}）/ 已接限时帖（元素为固定小形状 {id, progress, done, deadlineDay}）/ 本世办妥·失败·过期数 / 本世已过期帖 id（lapsedIds），children 登记后不再下钻；旧存档缺失补空状态，板面由 loadState 的 ensureTimedBoard 补齐、到期由 settleTimedEvents 在读档时结算；U-610 起时钟改天序（累计月份×每月天数），旧存档的 postedAge/deadlineAge 由 loadState 的 migrateTimedClock 换算" }),
   F(G, "character.dailyCommissions", "object", { make: () => ({ batchMonth: -1, pending: [], doneIds: [], completedCount: 0 }), children: ["batchMonth", "pending", "doneIds", "completedCount"], note: "U-390 日常委托事件池状态（本世）：本批刷新时的累计月份 batchMonth（-1 = 尚未刷新）/ 本批待办委托 id 列表 / 本批已办妥 id 列表 / 本世已办妥数，children 登记后不再下钻；旧存档缺失补空状态，本批内容由 loadState 的 ensureDailyBoard 按累计月份刷新补齐（未办妥不惩罚）；U-611 起刷新标记由年龄 dayAge 改累计月份 batchMonth，旧存档的 dayAge 由 loadState 的 migrateDailyClock 对齐换算（当前批次保全）" }),
   F(G, "character.signIns", "object", { make: () => ({ done: [], count: 0 }), children: ["done", "count"], note: "U-391 地点签到状态（本世）：已签到的签到点 id 列表 / 本世已签到数，children 登记后不再下钻；旧存档缺失补空状态，触发由旅行抵达尾巴与 loadState 的 settleSignInHere 结算（到达即得、大奖本世每处一次；U-392 起本世再抵达已签地点改发按档小奖、签到记入跨世图鉴 signInCodex）" }),
@@ -215,6 +219,11 @@ export const SAVE_FIELD_REGISTRY: readonly SaveFieldEntry[] = [
   F(G, "character.caveLevel", "number", { make: () => 0, note: "Q17 洞府聚灵阵等级（0–3，本世置办）" }),
   F(G, "character.breakBonus", "number", { make: () => 0, note: "Q17/Q18 下次突破助力（破境丹/请教，突破时消耗）" }),
   F(G, "character.totalMonths", "number", { make: (host) => { const a = host.age; return typeof a === "number" && Number.isFinite(a) && a > 0 ? Math.floor(a) * 12 : 0; }, note: "U-608 细时钟累计月份（本世自降生起算，年龄由它推导：满 12 个月进 1 岁）；旧存档缺失按 U-608 迁移口径补当前年龄 × 12（monthsPerYear 由配置表自检锁死为 12，与此换算一致）" }),
+  F(G, "character.actionPoints", "number", { make: () => ACTION_POINTS.annualCap, note: "U-409 年度行动点余量（本世当前年份，上限与耗点在配置表 action-points.json）；旧存档缺失按满池补值（与新世同口径——本世尚未花过点，不凭空扣减）" }),
+  F(G, "character.actionYear", "number", { make: (host) => { const tm = host.totalMonths; return typeof tm === "number" && Number.isFinite(tm) ? actionYearFor(tm) : 1; }, note: "U-409 当前年份序号（自降生起算、降生为第 1 年）；旧存档缺失按累计月份推导（content.ts 的 actionYearFor）——本行登记在 character.totalMonths 之后，其补值已先行落定，推导基数可靠" }),
+  F(G, "character.annualEventYear", "number", { make: (host) => { const tm = host.totalMonths; return typeof tm === "number" && Number.isFinite(tm) ? actionYearFor(tm) : 1; }, note: "U-410 已触发（已呈现或已排队）年度事件的最近年份序号；旧存档缺失按累计月份推导为当前年——以当前年份初始化、不补触发过去年份，下一个跨年才开始触发；轮回不带走（降生构造点给第 1 年）" }),
+  F(G, "character.annualEventQueued", "boolean", { make: () => false, note: "U-410 年度事件待排队标志：跨年瞬间有待决事件未决（或在路线中/临寿终）时置 true，待决解决后由 saveState 的落盘挂点补呈现并清零；旧存档缺失补 false（无排队欠账）" }),
+  F(G, "character.resonanceDisorderUntil", "number", { make: () => 0, note: "U-416 灵力紊乱 debuff 的到期累计月份（灵力暴走结算时置为当时累计月份 + 配置 disorderMonths，紊乱期间修炼收益按配置打折，到期由 advanceMonths 的 settleResonanceDisorder 自动消散清零）；共鸣/失衡状态本身实时计算不落盘；旧存档缺失补 0（无紊乱——暴走未发生过，不凭空发 debuff），轮回不带走（降生构造点给 0）" }),
   F(G, "character.artifactBonusApplied", "boolean", { make: (host) => { const id = host.artifactId; return typeof id === "string" && id !== ""; }, note: "U-618 本命法宝属性修正是否已生效；旧存档缺失按旧口径补值（持有法宝即已生效），随后由 loadState 的门槛对齐（syncArtifactGate）把未达新门槛者的加成收回并封存——法宝保留不没收，境界达到自动解封" }),
   // —— 以下为构造点保证必有的字段（无迁移补值） ——
   F(G, "character.name", "string"),
@@ -251,6 +260,8 @@ export const SAVE_FIELD_REGISTRY: readonly SaveFieldEntry[] = [
   F(G, "character.pendingEvent.options", "array", { children: ["label", "hint", "attr", "dc", "cost", "costBlocked", "loop"], note: "PendingOption[]；cost/costBlocked 为 U-377 代价模板字段、loop 为 U-378 见好就收模板标记，均可缺省（无模板选项与旧存档均无），cost 是固定小形状（五种可支付键）不再下钻" }),
   F(G, "character.pendingEvent.loop", "object", { optional: true, children: ["eventId", "optionIdx", "round", "baseDc", "gains"], note: "U-378 见好就收进行状态（PendingLoop）；仅抉择待决事件带此字段，gains 为累计收获小形状（五种资源键）不再下钻" }),
   F(G, "character.pendingEvent.daily", "object", { optional: true, children: ["dailyId", "locationId"], note: "U-390 日常委托触发标记（{dailyId, locationId}）；仅日常委托触发的待决事件带此字段，chooseOption 据此在办妥时结清日常奖励" }),
+  F(G, "character.pendingEvent.annual", "object", { optional: true, children: ["year", "grand"], note: "U-410 年度事件标记（{year 所属年份序号, grand 是否年度大事件}）；仅年度事件推演触发的待决事件带此字段，chooseOption 据此补记了结日志并跳过地点结算尾巴" }),
+  F(G, "character.pendingEvent.grid", "object", { optional: true, children: ["cellType"], note: "U-412 翻格标记（{cellType 翻开的格子类型}）；仅翻格触发的待决事件带此字段，chooseOption 据此跳过地点结算尾巴（与年度标记同口径）" }),
   F(G, "character.lastRoll", "object", { nullable: true, note: "最近一次判定（LastRoll）" }),
   F(G, "character.lastRoll.label", "string"),
   F(G, "character.lastRoll.dice", "number"),

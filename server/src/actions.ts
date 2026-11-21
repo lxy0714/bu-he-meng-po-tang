@@ -192,6 +192,22 @@
 // 齐。只做接取式这一项：U-389 限时事件与 U-390 日常委托事件池
 // 未碰，Q1–Q18 与 Q34–Q36、现有事件触发与结算规则未动。
 //
+// U-407 多阶段任务模型（2026-11-21）：通用任务引擎——任务定义放
+// 配置表 content/quests.json（多阶段 + 可分支：阶段含目标类型/参
+// 数/文案/阶段奖励，分支阶段完成后二选一、选项决定下一阶段走向
+// 与业力/奖励差异），进度放存档（Character.quests：当前阶段、阶
+// 段内计数、分支选择、状态；多任务并行上限 3、按世重置）。目标
+// 类型只用现有动作可观测的钩子（指定地点探索/旅行抵达/斗法胜
+// 利/修炼/副职/拜访 NPC/突破成功/宗门差事），引擎 bumpQuests 统
+// 一监听推进、挂在与委托相同的既有结算尾巴上，不为每个任务手写
+// 逻辑；引擎能表达单阶段任务，为 U-406 等后续项复用留接口。落
+// 地 3 条连环任务（三顾灵田 / 瀑下水灵（含分支）/ 破境三关），
+// 挂在委托板区域新增「连环任务」区（actions-quests.ts 的 quest
+// 动作：接取/抉择/回板结算/放弃）。奖励只用现有资源类型（灵石/
+// 修为/丹药/传承点/业力），量级与委托同档。U-388 委托板、U-389
+// 限时帖、U-390 日常委托行为与代码路径一字未动（本项不做迁移
+// 重构）。
+//
 // U-389 限时事件（2026-11-15，来源 B-65《修真聊天群》，拆自 v1
 // U-47 的限时部分）：群友发布的限时帖（actions-timed.ts 的 timedEvent
 // 动作：接取/交帖/撕帖）——带倒计时：帖子挂板 postDays 天无人接取
@@ -369,6 +385,8 @@ import { lifeActions } from "./actions-life";
 import { playActions } from "./actions-play";
 import { worldActions } from "./actions-world";
 import { boardActions } from "./actions-board";
+import { questActions } from "./actions-quests";
+import { goalActions } from "./actions-goals";
 import { timedActions } from "./actions-timed";
 import { aiActions } from "./actions-ai";
 
@@ -553,6 +571,8 @@ const rawActions = {
   ...playActions,
   ...worldActions,
   ...boardActions,
+  ...questActions,
+  ...goalActions,
   ...timedActions,
   ...aiActions,
 };

@@ -4,6 +4,31 @@
 >
 > This file records the real development milestones of *No Mengpo Soup*. v1.0.0 is the initial open-source release, collecting everything built before it in a hosted environment. All dates are actual completion dates; no fictional versions.
 
+## v1.2.0 — 行动点、渡劫与翻格 · Action Points, Tribulation & the Grid（2026-11-21）
+
+### 2026-11-21 — 事件系统十项 · Ten Event-System Items
+
+- 随机探索三模式（U-402）：地图页新增「随机探索」区——远征（偏灵石）、探秘（偏材料）、试炼塔（偏修为）三模式各有独立事件池（各 8 条），一次进入算一次探索行动（3 个月），不设境界门槛（难度按相对差距缩放），与地点探索的密度、隐藏埋点、三界秘境掉落槽互不干扰。
+  Three random-exploration modes (U-402): a new Random Exploration zone on the map tab — Expedition (spirit-stone leaning), Delving (material leaning) and the Trial Tower (cultivation leaning), each with its own event pool (8 events apiece). One entry is one exploration action (3 months) with no realm gate (difficulty scales by relative gap), fully independent of location density, hidden caches and secret-realm slots.
+- 探索分类（U-403）：探索结果按类型打标（际遇 / 战斗 / 采集 / 秘闻等），日志与编年史可按类型回看，角色页有本世分类计数。
+  Exploration categories (U-403): exploration outcomes are tagged by type (encounter / combat / gathering / lore and more); logs and the chronicle can be filtered by type, and the character page counts this life's outcomes per type.
+- 多阶段连环任务（U-407）：委托板新增连环任务（3 条链共 9 段），段段相扣、整链限时（按月计），完成整链另有大奖；与普通委托并存，同受接取上限约束。
+  Multi-stage quest chains (U-407): the commission board gains chained quests (3 chains, 9 stages) — stages unlock in sequence under a whole-chain monthly deadline, with a bonus prize for finishing a chain; they coexist with ordinary commissions under the same holding cap.
+- 单轮目标（U-408）：每轮从 3 个候选里自选 1 个小目标（如探索若干次、抵达若干地点），达成即领奖，过期自动换新。
+  Round goals (U-408): each round, pick 1 of 3 candidate mini-goals (explore a number of times, reach a number of locations, …); completing it pays out at once, and an expired goal is replaced automatically.
+- 年度行动点（U-409）：按细时钟适配的年度行动点——每年 40 点，各动作耗点进配置表（修炼 20 / 探索 10 / 突破 15 / 副职 12 / 宗门差事 12 / 斗法 6 / 社交 6 / 旅行 4），休整不耗点以防卡死；耗尽后本年只能做免费动作，跨年刷新。
+  Yearly action points (U-409): a yearly action-point budget adapted to the fine clock — 40 points per year, per-action costs in a config table (cultivate 20 / explore 10 / breakthrough 15 / craft 12 / sect errand 12 / duel 6 / social 6 / travel 4), resting always free so a spent year can never soft-lock; the budget refreshes each new year.
+- 年度事件（U-410）：每年随机触发一次年度大事件（兽潮、宗门大比之类），多选一抉择，结算走既有奖惩与判定链。
+  Annual events (U-410): once a year a grand event strikes at random (a beast tide, a sect tournament, …) — a multi-way choice settled through the existing reward and check pipeline.
+- 翻格遇事件（U-412）：新增 3×3 覆面棋盘探索——开局算一次探索行动（3 个月 + 10 行动点），九格在战斗 / 机缘 / 休整 / 狩猎 / 突破五类中按权重随机分布、发牌即定死，逐格翻开逐格结算；章节题词随境界推进（共九章）。
+  Flip-grid exploration (U-412): a 3×3 face-down board — opening a board is one exploration action (3 months + 10 action points); its nine cells are dealt once from five types (combat / fortune / rest / hunt / breakthrough) by configured weights and settled one flip at a time; chapter verses advance with your realm (nine chapters).
+- 破境丹与禁地夺丹（U-414）：大境界突破新增破境丹门槛——无丹突破被拦并明示夺丹指引（不耗行动点与时间），持丹突破判定成功才消耗，失败不消耗；小境界突破不需要丹。修炼宗门页新增「禁地夺丹」：大圆满时挑战对应禁地 Boss（8 位，按目标境界配表）夺丹，按一次斗法计，败可无限再战。
+  Breakthrough pills & forbidden-ground duels (U-414): major-realm breakthroughs now require a Breakthrough Pill — without one the attempt is blocked with directions to get one (no action points or time charged); the pill is consumed only when the breakthrough check succeeds, never on failure; minor-stage breakthroughs need no pill. A new Forbidden-Ground Duel on the cultivation page lets a cultivator at Perfection challenge the matching guardian boss (8, one per target realm) for a pill, at the cost of one duel, retrying freely after a loss.
+- 渡劫仪式（U-415）：大境界突破判定成功后不直接升境，进入渡劫三段——雷劫来临叙事卡 → 渡劫战（雷劫化身按目标境界配表，走斗法判定链）→ 劫后结算；胜则正式升境并消耗破境丹，败则退回本境大圆满（丹不消耗、修为全额退回、渡劫战气血钳制不致死）；渡劫状态进存档，可中断续走。
+  The tribulation rite (U-415): a successful major-breakthrough check no longer raises the realm directly — it opens a three-stage tribulation (an omen card, a duel against the tribulation avatar tiered to the target realm on the combat check chain, then settlement). Victory raises the realm and consumes the pill; defeat returns you to Perfection of the current realm (pill kept, cultivation fully refunded, the tribulation duel cannot kill). Tribulation state is saved and can be resumed.
+- 属性共鸣 / 失衡（U-416）：按四维最高 / 最低比值实时判定三态——比值 ≤1.6 为「四象共鸣」（修炼 +5%，探索可触发共鸣奇遇），≥2.5 为「灵力失衡」（探索与修炼可触发灵力暴走二选一事件，并留 6 个月「灵力紊乱」：修炼 −10%），中间为平稳；角色页实时显示状态，暴走结算钳制气血、绝不致死。
+  Attribute resonance & imbalance (U-416): the ratio of your highest to lowest attribute is judged live in three states — at ≤1.6, Four-Signs Resonance (cultivation +5%, with a chance of resonance encounters while exploring); at ≥2.5, Spiritual Imbalance (exploration and cultivation can trigger a two-choice mana-surge event and leave a 6-month Spiritual Turmoil debuff, cultivation −10%); in between, Balanced. The character page shows the state live; surge settlements clamp health and can never kill.
+
 ## v1.1.0 — 三界秘境与无灵根 · Secret Realms & the Rootless（2026-11-20）
 
 ### 2026-11-18 ~ 20 — 功法品阶、无灵根、探索调参与三界秘境 · Technique Tiers, the Rootless, Exploration Tuning & Secret Realms

@@ -5,20 +5,34 @@
 
 import { combatDcFor, CHECK_CONFIG } from "./checks";
 import {
-ARTIFACTS, ARTIFACT_SOURCES, CAVE_UPGRADE_BASE, CLASSIC_REALMS, COMMISSIONS, CRAFT_SKILLS, DAILY_COMMISSIONS, DAILY_EVENTS, DESTINIES, ENEMIES, EVENT_PACKS, EVENT_RELEASES, EXPLORE_TUNING, FORGE, LOCATION_DROPS, LOCATIONS,
-MAINLINE_CHAPTERS, MAINLINE_TOTAL_SHARDS, NAME_POOL, NPCS, ORIGIN_POOL, REINCARNATION_POINTS, ROOTS,
+ACTION_POINTS, ARTIFACTS, ARTIFACT_SOURCES, CAVE_UPGRADE_BASE, CLASSIC_REALMS, COMMISSIONS, CRAFT_SKILLS, DAILY_COMMISSIONS, DAILY_EVENTS, DESTINIES, ENEMIES, EVENT_PACKS, EVENT_RELEASES, EXPLORE_TUNING, FORGE, LOCATION_DROPS, LOCATIONS,
+MAINLINE_CHAPTERS, MAINLINE_TOTAL_SHARDS, NAME_POOL, NPCS, ORIGIN_POOL, QUESTS, REINCARNATION_POINTS, ROOTS, ROUND_GOALS,
 SECT_RANKS, SEALED_EGGS, SECRET_REALMS, SHOP, SIGN_INS, TALENTS, TECHNIQUES, TECHNIQUE_MASTERY, TIME_COSTS, TREASURES, TIMED_EVENTS,
 type ArtifactDef, type EnemyDef, type LocationDef, type MainlineChapter, type NpcDef, type RealmDef,
 type SectRankDef, type TalentDef, type TechDef, type TreasureDef,
 } from "./content";
 
 export {
-  ARTIFACTS, ARTIFACT_SOURCES, CAVE_UPGRADE_BASE, CLASSIC_REALMS, COMMISSIONS, CRAFT_SKILLS, DAILY_COMMISSIONS, DAILY_EVENTS, DESTINIES, ENEMIES, EVENT_PACKS, EVENT_RELEASES, EXPLORE_TUNING, FORGE, LOCATION_DROPS, LOCATIONS,
-  MAINLINE_CHAPTERS, MAINLINE_TOTAL_SHARDS, NAME_POOL, NPCS, ORIGIN_POOL, REINCARNATION_POINTS, ROOTS,
+  ACTION_POINTS, ARTIFACTS, ARTIFACT_SOURCES, CAVE_UPGRADE_BASE, CLASSIC_REALMS, COMMISSIONS, CRAFT_SKILLS, DAILY_COMMISSIONS, DAILY_EVENTS, DESTINIES, ENEMIES, EVENT_PACKS, EVENT_RELEASES, EXPLORE_TUNING, FORGE, LOCATION_DROPS, LOCATIONS,
+  MAINLINE_CHAPTERS, MAINLINE_TOTAL_SHARDS, NAME_POOL, NPCS, ORIGIN_POOL, QUESTS, REINCARNATION_POINTS, ROOTS, ROUND_GOALS,
   SECRET_REALMS, SECT_RANKS, SEALED_EGGS, SHOP, SIGN_INS, TALENTS, TECHNIQUES, TECHNIQUE_MASTERY, TIME_COSTS, TREASURES, TIMED_EVENTS,
 };
+export type { ActionPointsDef, ActionPointKey } from "./content";
+export { ACTION_POINT_LABELS, actionYearFor } from "./content";
 export type { SecretRealmDef, SecretRealmBossDef, SecretRealmsDef } from "./content";
 export { secretRealmAt } from "./content";
+export type { RandomExploreDef, RandomExploreEventDef, RandomExploreGrant, RandomExploreModeDef, RandomExploreModeId, RandomExploreOptionDef } from "./content";
+export { RANDOM_EXPLORE, RANDOM_EXPLORE_EVENTS, isRandomExploreEventId, randomExploreEventById, randomExploreGrantFor, randomExploreModeById } from "./content";
+export type { AnnualEventsDef } from "./content";
+export { ANNUAL_EVENTS, ANNUAL_EVENT_DEFS, annualEventById, isAnnualEventId } from "./content";
+export type { BreakthroughBossDef, BreakthroughBossesDef } from "./content";
+export { BREAKTHROUGH_BOSSES, breakthroughBossFor } from "./content";
+export type { TribulationDef, TribulationsDef } from "./content";
+export { TRIBULATIONS, tribulationFor } from "./content";
+export type { ResonanceDef } from "./content";
+export { RESONANCE, RAMPAGE_EVENT_DEF, RESONANCE_ENCOUNTER_DEFS, isResonanceEventId, resonanceEventById } from "./content";
+export type { GridCellType, GridExploreDef, GridFallbackEventDef } from "./content";
+export { GRID_CELL_LABELS, GRID_CELL_TYPES, GRID_EXPLORE, gridChapterFor, gridEventPoolFor, gridEventTypesFor, gridFallbackEventById, gridFallbackEventsFor, gridPoemFor, isGridFallbackEventId } from "./content";
 export type { ExploreTuningDef, ExploreTuningRowDef } from "./content";
 export { defaultHiddenSlots, exploreDensityWord, exploreTuningFor } from "./content";
 export type { TechniqueMasteryDef, TechniqueProfSource } from "./content";
@@ -29,6 +43,8 @@ export type { ArtifactSourcesDef, ArtifactDropEntryDef, ArtifactSectGrantDef, Ar
 export { commissionGrantFor, sectGrantForRank } from "./content";
 export type { ForgeDef, ForgeTierDef } from "./content";
 export type { CommissionsDef, CommissionDef, CommissionObjectiveKind, DailyEventsDef } from "./content";
+export type { QuestsDef, QuestDef, QuestStageDef, QuestObjectiveDef, QuestObjectiveKind, QuestReward, QuestBranchOptionDef } from "./content";
+export type { RoundGoalsDef, RoundGoalDef, RoundGoalKind } from "./content";
 export type { TimedEventsDef, TimedEventDef, TimedRepDelta, TimedRepStages } from "./content";
 export type { DailyCommissionsDef, DailyCommissionDef, DailySource } from "./content";
 export type { SignInsDef, SignInSpotDef, SignInReward, SignInTier, SignInTierDef } from "./content";
@@ -36,7 +52,7 @@ export type { SealedEggsDef, SealedEggDef } from "./content";
 export type { EventPacksDef, EventPackDef } from "./content";
 export type { EventReleasesDef, EventReleaseBatchDef } from "./content";
 export type { LocationDropsDef, LocationDropDef, DropTier, DropTierDef } from "./content";
-export { CURRENT_EVENT_VERSION, birthBoonById, commissionById, craftLevelDefFor, craftNextLevelDef, craftProficiencyFor, craftYieldPctFor, dailyCommissionById, dropTierDef, eventPackOf, eventReleaseVersion, eventReleasedForDeck, eventUnlockedForLife, forgeCandidatesFor, forgeTierByTier, locationDropAt, reincarnationPointsForGrade, reincarnationPointsForShards, sealedEggAtLocation, signInByLocation, signInTierDef, techniqueDropTier, techniqueProfGainFor, timeCostMonths, timedEventById, travelMonthsTo } from "./content";
+export { CURRENT_EVENT_VERSION, birthBoonById, commissionById, craftLevelDefFor, craftNextLevelDef, craftProficiencyFor, craftYieldPctFor, dailyCommissionById, dropTierDef, eventPackOf, eventReleaseVersion, eventReleasedForDeck, eventUnlockedForLife, forgeCandidatesFor, forgeTierByTier, locationDropAt, questById, roundGoalById, reincarnationPointsForGrade, reincarnationPointsForShards, sealedEggAtLocation, signInByLocation, signInTierDef, techniqueDropTier, techniqueProfGainFor, timeCostMonths, timedEventById, travelMonthsTo } from "./content";
 export { CRAFT_KINDS } from "./content";
 export type { CraftKind, CraftSkillsDef, CraftLevelDef, CraftBreakthroughDef, CraftKindDef } from "./content";
 export type { TimeCostsDef, TimeCostKey } from "./content";
